@@ -7,29 +7,29 @@ This Repo is for visual-intelligence-learning projects
   Build the customized model to classify CIFAR100 both supervised and self-supervised method
 
 ## How to Run? (Method 1. train from the scratch)
-  1. First of all, make conda environment
+  1. First of all, make conda environment <br>
       `conda env create -f first_environment.yml -n <environment-name-you-want>`
       
-  3. Next, make sure your current location is among first_project or second_project
+  2. Next, make sure your current location is among first_project or second_project <br>
   
-  4. Finally, we can train and test CIFAR100 using command under.
+  3. Finally, we can train and test CIFAR100 using command under.<br>
       `python train.py --config configs/base_config.yaml --output ./output/<output-directory-you-want>`
 
-     ⭐️ config and output argument is mandatory. You can visualize the result and training curve with under command.
+     ⭐️ config and output argument is mandatory. You can visualize the result and training curve with under command. <br>
       `tensorboard --logdir ./output/<output-directory-you-want>`
 
-     ⭐️ Selection of config file will be announced after you execute the training by our teammates. If you want to check correcteness of config file, please contact me. (pilot920@hanyang.ac.kr)
+     ⭐️ Selection of config file will be announced after you execute the training by our teammates. If you want to check correcteness of config file, please contact me. (pilot920@hanyang.ac.kr) <br>
        current best performence config file : base_config.yaml
 
 ## Do you need help?
-  Please contact our team members below.
-  * (Team Leader) Minseok Kang 
-    E-mail : pilot920@hanyang.ac.kr
+  Please contact our team members below. <br>
+  * (Team Leader) Minseok Kang <br>
+    E-mail : pilot920@hanyang.ac.kr <br>
 
-  * (Team Leader) Soyoon Kim
-    E-mail : (comming soon)
+  * (Team Leader) Soyoon Kim <br>
+    E-mail : (comming soon) <br>
 
-  * (Team Member) Xiang Li
-    E-mail : (comming soon)
+  * (Team Member) Xiang Li <br>
+    E-mail : (comming soon) <br>
        
   
