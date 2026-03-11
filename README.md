@@ -8,9 +8,7 @@ This Repo is for visual-intelligence-learning projects
 
 ## How to Run? (Method 1. train from the scratch)
   1. First of all, make conda environment
-      `conda env create -n <environment-name-you-want> python=3.9 -y`
-     Additionally, match dependencies with our environment
-      `conda env create -f environment.yml`
+      conda env create -f first_environment.yml -n <environment-name-you-want>
       
   3. Next, make sure your current location is among first_project or second_project
   
