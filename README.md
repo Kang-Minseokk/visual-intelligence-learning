@@ -8,11 +8,13 @@ This Repo is for visual-intelligence-learning projects
 
 ## How to Run? (Method 1. train from the scratch)
   1. First of all, make conda environment
-      `conda env create -f first_environment.yml`
+      `conda env create -n <environment-name-you-want> python=3.9 -y`
+     Additionally, match dependencies with our environment
+      `conda env create -f environment.yml`
       
-  2. Next, make sure your current location is among first_project or second_project
+  3. Next, make sure your current location is among first_project or second_project
   
-  3. Finally, we can train and test CIFAR100 using command under.
+  4. Finally, we can train and test CIFAR100 using command under.
       `python train.py --config configs/base_config.yaml --output ./output/<output-directory-you-want>`
 
      ⭐️ config and output argument is mandatory. You can visualize the result and training curve with under command.
