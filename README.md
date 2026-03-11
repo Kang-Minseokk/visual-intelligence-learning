@@ -19,7 +19,7 @@ This Repo is for visual-intelligence-learning projects
       `tensorboard --logdir ./output/<output-directory-you-want>`
 
      ⭐️ Selection of config file will be announced after you execute the training by our teammates. If you want to check correcteness of config file, please contact me. (pilot920@hanyang.ac.kr) <br>
-       current best performence config file : base_config.yaml
+       ✅ current best performence config file : base_config.yaml
 
 ## Do you need help?
   Please contact our team members below. <br>
