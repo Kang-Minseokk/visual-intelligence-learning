@@ -22,13 +22,13 @@ def _log_epoch_metrics(
     epoch,
     train_loss,
     train_acc,
-    test_loss,
-    test_acc, 
+    valid_loss,
+    valid_acc,    
 ):
     writer.add_scalar("Train/Loss", float(train_loss), epoch)
     writer.add_scalar("Train/Acc", float(train_acc), epoch)
-    writer.add_scalar("Test/Loss", float(test_loss), epoch)
-    writer.add_scalar("Test/Acc", float(test_acc), epoch)    
+    writer.add_scalar("Valid/Loss", float(valid_loss), epoch)
+    writer.add_scalar("Valid/Acc", float(valid_acc), epoch)    
 
 
 def _log_model_graph(writer, model, cfg, device):
@@ -47,7 +47,7 @@ def main():
 
     device = build_device(cfg)
 
-    train_loader, test_loader, input_dim = build_dataset_loaders(cfg)
+    train_loader, valid_loader, test_loader, input_dim = build_dataset_loaders(cfg)
 
     model_name = cfg['model'].get('name', 'base')
     model = build_model(cfg, device, model_name, input_dim)     
@@ -77,23 +77,26 @@ def main():
         print(f"[Epoch {epoch:3d}] Time: {end - start:.2f}s | Avg Step Time: {avg_step_time:.4f}s | Peak Mem: {peak_mem_gb:.2f} GB | Throughput: {throughput:.2f} samples/s")
         
         train_loss, train_acc = evaluator.evaluate(train_loader)  
-        test_loss, test_acc = evaluator.evaluate(test_loader)
-         
-        print(f"test_loss: {test_loss:.4f} | test_acc: {test_acc:.4f}")
+        valid_loss, valid_acc = evaluator.evaluate(valid_loader)
+                 
         print(f"train_loss: {train_loss:.4f} | train_acc: {train_acc:.4f}")
+        print(f"valid_loss: {valid_loss:.4f} | valid_acc: {valid_acc:.4f}") 
 
         _log_epoch_metrics(
             writer,
             epoch,
             train_loss,
             train_acc,
-            test_loss,
-            test_acc, 
-        )
+            valid_loss,
+            valid_acc,            
+        )            
  
     # === TB: 종료 ===
     writer.flush()
     writer.close()
+    
+    test_loss, test_acc = evaluator.evaluate(test_loader)
+    print(f"test_loss: {test_loss:.4f} | test_acc: {test_acc:.4f}")
 
 
 if __name__ == '__main__':

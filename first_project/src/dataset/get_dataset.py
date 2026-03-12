@@ -4,6 +4,7 @@ from torchvision import datasets, transforms
 import torch
 import numpy as np
 import random
+from sklearn.model_selection import train_test_split
 
 def worker_init_fn(worker_id):
     """각 worker process의 random seed를 고정합니다."""
@@ -55,13 +56,24 @@ def get_dataset_loaders(
         
         train_base = datasets.CIFAR100(root=root, train=True, transform=transform, download=download)
         test_base  = datasets.CIFAR100(root=root, train=False, transform=transform, download=download)
-        input_dim = "3*32*32"            
+        
+        indices = np.arange(len(train_base))
+        targets = train_base.targets
+        train_idx, valid_idx = train_test_split(
+            indices,
+            test_size=0.1,
+            random_state=42,
+            stratify=targets
+        )
+        input_dim = "3*32*32"
         
     else:
         raise ValueError(f"Invalid dataset_name: {dataset_name}")
 
     if k_train is None or k_train < 0:
-        train_set, test_set = train_base, test_base
+        train_set = Subset(train_base, train_idx)
+        valid_set = Subset(train_base, valid_idx)
+        test_set = test_base
     else:
         k_per_class_train = max(1, k_train // num_classes)
         k_per_class_test = max(1, k_per_class_train // 10)
@@ -76,9 +88,14 @@ def get_dataset_loaders(
                               num_workers=num_workers, pin_memory=True,
                               generator=torch.Generator().manual_seed(seed),
                               worker_init_fn=worker_init_fn)
+    
+    valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=True,
+                              num_workers=num_workers, pin_memory=True, 
+                              generator=torch.Generator().manual_seed(seed), 
+                              worker_init_fn=worker_init_fn)
 
     test_loader  = DataLoader(test_set,  batch_size=batch_size, shuffle=False,
                               num_workers=num_workers, pin_memory=True,
                               worker_init_fn=worker_init_fn)
     
-    return train_loader, test_loader, input_dim
+    return train_loader, valid_loader, test_loader, input_dim
