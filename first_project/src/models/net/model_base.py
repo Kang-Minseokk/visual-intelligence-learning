@@ -46,7 +46,7 @@ def set_model_output_dir(output_dir: str) -> None:
 class ModelUtilMixin(nn.Module):
     def __init__(self):
         super().__init__()
-        self.flatten = nn.Flatten()
+        self.flatten = nn.Identity()
         self.feature_extractor = nn.Identity()
         self.classifier = nn.Identity()
         

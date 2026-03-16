@@ -1,8 +1,6 @@
 from src.models.linear.base_linear import BaseLinear
 from torch import nn
 from src.models.net.model_base import build_layers, ModelUtilMixin
-from src.models.norm.base_norm import BaseNorm  
-from src.models.linear.base_linear import BaseLinear 
 
 class BaseNet(ModelUtilMixin):
     def __init__(self, 
@@ -15,7 +13,7 @@ class BaseNet(ModelUtilMixin):
                  ):
         super().__init__()
         
-        self.flatten = nn.Flatten()
+        self.flatten = nn.Identity()
         layers, width = build_layers(
             in_features = in_features,
             hidden_features = hidden_features,
@@ -24,9 +22,13 @@ class BaseNet(ModelUtilMixin):
             linear_cls = BaseLinear,
             activation_option = activation_option,            
         )
-        layers.append(BaseNorm(width))
+        layers.append(nn.BatchNorm2d(width))
         self.feature_extractor = nn.Sequential(*layers) if layers else nn.Identity()        
-        self.classifier = nn.Linear(width, num_classes, bias=True)
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(width, num_classes, bias=True),
+        )
         
     
     
