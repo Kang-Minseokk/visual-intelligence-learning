@@ -20,6 +20,7 @@ def _dataset_loader_kwargs(cfg, *, download=None):
         'k_train': k_train,
         'num_classes': int(cfg['model']['num_classes']),
         'dataset_name': str(cfg['data'].get('name', 'FashionMNIST')),
+        'label_level': str(cfg['data'].get('label_level', 'coarse')),
     }
 
 def build_dataset_loaders(cfg):
@@ -30,14 +31,21 @@ def build_model(cfg, device, model_name: str, in_features=None):
     """
         모델을 만들어내는 빌더 함수입니다.
     """
+    input_shape = eval(str(in_features))
+
     if model_name == "base":
+        if isinstance(input_shape, (tuple, list)):
+            base_in_features = int(input_shape[0])
+        else:
+            base_in_features = int(input_shape)
+
         model = BaseNet(
-            in_features=eval(str(in_features)),
+            in_features=base_in_features,
             hidden_features=int(cfg['model']['hidden_features']),
             depth=cfg['model']['depth'],            
             dropout=cfg['model']['dropout'],
             num_classes=cfg['model']['num_classes'],
-        )        
+        )
     else:
         raise ValueError(f"Unknown model name: {model_name}")
     print(f"✅ Model Check!\n{model}")

@@ -7,7 +7,7 @@ from torch.optim import Adam
 class Trainer:
     def __init__(self, model, device, lr: float, weight_decay: float, log_interval: int, out_dir: str, config=None):
         self.model = model.to(device)
-        self.device = device        
+        self.device = device
         self.optimizer = Adam(model.parameters(), lr=float(lr), weight_decay=float(weight_decay))
 
         self.criterion = nn.CrossEntropyLoss()
@@ -31,11 +31,10 @@ class Trainer:
             
             self.optimizer.zero_grad()
             loss.backward()
-            self.optimizer.step()            
+            self.optimizer.step()
 
             running_loss += loss.item()
-            if step % 100 == 0:
-                progress_bar.set_postfix({"Loss": f"{loss.item():.7f}"})
-                progress_bar.update(10)
+            if step % self.log_interval == 0:
+                progress_bar.set_postfix({"Loss": f"{loss.item():.7f}check"})
         
         return running_loss / (step + 1)
