@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 
 from src.models.net.base import BaseNet
+from src.models.net.wideresnet import WideResNet
 from torch.utils.tensorboard import SummaryWriter
 from src.engine.trainer import Trainer
 from src.dataset.get_dataset import get_dataset_loaders
@@ -45,6 +46,17 @@ def build_model(cfg, device, model_name: str, in_features=None):
             depth=cfg['model']['depth'],            
             dropout=cfg['model']['dropout'],
             num_classes=cfg['model']['num_classes'],
+        )
+    elif model_name == "wideresnet":
+        if len(input_shape) != 3:
+            raise ValueError(f"WideResNet expects 3D image input (C,H,W), got: {input_shape}")
+
+        model = WideResNet(
+            in_channels=int(input_shape[0]),
+            depth=int(cfg['model'].get('wrn_depth', 28)),
+            widen_factor=int(cfg['model'].get('widen_factor', 2)),
+            dropout=float(cfg['model'].get('dropout', 0.0)),
+            num_classes=int(cfg['model']['num_classes']),
         )
     else:
         raise ValueError(f"Unknown model name: {model_name}")
