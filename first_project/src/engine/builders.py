@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 
 from src.models.net.base import BaseNet
+from src.models.net.densenet import DenseNet
 from src.models.net.wideresnet import WideResNet
 from torch.utils.tensorboard import SummaryWriter
 from src.engine.trainer import Trainer
@@ -57,6 +58,21 @@ def build_model(cfg, device, model_name: str, in_features=None):
             widen_factor=int(cfg['model'].get('widen_factor', 2)),
             dropout=float(cfg['model'].get('dropout', 0.0)),
             num_classes=int(cfg['model']['num_classes']),
+        )
+    elif model_name == "densenet":
+        if len(input_shape) != 3:
+            raise ValueError(f"DenseNet expects 3D image input (C,H,W), got: {input_shape}")
+
+        block_config = cfg['model'].get('dense_block_config', [6, 12, 24, 16])
+        model = DenseNet(
+            in_channels=int(input_shape[0]),
+            num_classes=int(cfg['model']['num_classes']),
+            growth_rate=int(cfg['model'].get('growth_rate', 12)),
+            block_config=tuple(int(v) for v in block_config),
+            num_init_features=int(cfg['model'].get('num_init_features', 24)),
+            bn_size=int(cfg['model'].get('bn_size', 4)),
+            drop_rate=float(cfg['model'].get('dropout', 0.0)),
+            compression=float(cfg['model'].get('compression', 0.5)),
         )
     else:
         raise ValueError(f"Unknown model name: {model_name}")

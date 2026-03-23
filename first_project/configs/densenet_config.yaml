@@ -1,0 +1,27 @@
+seed: 42
+output_dir: logs
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 32
+  k_train: -1
+model:
+  name: "densenet"
+  num_classes: 100
+  dropout: 0.1
+  growth_rate: 12
+  dense_block_config: [6, 12, 24, 16]
+  num_init_features: 24
+  bn_size: 4
+  compression: 0.5
+train:
+  epochs: 100
+  lr: 1e-3
+  weight_decay: 1e-4
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  momentum : 0.9
