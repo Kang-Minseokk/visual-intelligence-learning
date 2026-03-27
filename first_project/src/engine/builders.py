@@ -4,6 +4,7 @@ import torch
 
 from src.models.net.base import BaseNet
 from src.models.net.densenet import DenseNet
+from src.models.net.pyramidnet import PyramidNet
 from src.models.net.wideresnet import WideResNet
 from torch.utils.tensorboard import SummaryWriter
 from src.engine.trainer import Trainer
@@ -23,6 +24,9 @@ def _dataset_loader_kwargs(cfg, *, download=None):
         'num_classes': int(cfg['model']['num_classes']),
         'dataset_name': str(cfg['data'].get('name', 'FashionMNIST')),
         'label_level': str(cfg['data'].get('label_level', 'coarse')),
+        'randaugment_enable': bool(cfg['data'].get('randaugment_enable', False)),
+        'randaugment_num_ops': int(cfg['data'].get('randaugment_num_ops', 2)),
+        'randaugment_magnitude': int(cfg['data'].get('randaugment_magnitude', 9)),
     }
 
 def build_dataset_loaders(cfg):
@@ -73,6 +77,17 @@ def build_model(cfg, device, model_name: str, in_features=None):
             bn_size=int(cfg['model'].get('bn_size', 4)),
             drop_rate=float(cfg['model'].get('dropout', 0.0)),
             compression=float(cfg['model'].get('compression', 0.5)),
+        )
+    elif model_name == "pyramidnet":
+        if len(input_shape) != 3:
+            raise ValueError(f"PyramidNet expects 3D image input (C,H,W), got: {input_shape}")
+
+        model = PyramidNet(
+            in_channels=int(input_shape[0]),
+            num_classes=int(cfg['model']['num_classes']),
+            depth=int(cfg['model'].get('pyramid_depth', 110)),
+            alpha=int(cfg['model'].get('pyramid_alpha', 48)),
+            dropout=float(cfg['model'].get('dropout', 0.0)),
         )
     else:
         raise ValueError(f"Unknown model name: {model_name}")
