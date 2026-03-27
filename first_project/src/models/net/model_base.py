@@ -60,3 +60,13 @@ class ModelUtilMixin(nn.Module):
         h = self.feature_extractor(x)
         y = self.classifier(h)
         return y
+
+    def initialize_weights_kaiming(self) -> None:
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(module, nn.BatchNorm2d):
+                nn.init.ones_(module.weight)
+                nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Linear) and module.bias is not None:
+                nn.init.zeros_(module.bias)

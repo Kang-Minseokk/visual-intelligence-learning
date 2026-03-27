@@ -12,16 +12,14 @@ data:
   randaugment_num_ops: 2
   randaugment_magnitude: 9
 model:
-  name: "densenet"
+  name: "densenet_bc_100_12"
   num_classes: 100
-  dropout: 0.3
+  dropout: 0.2
   growth_rate: 12
-  dense_block_config: [6, 12, 24, 16]
-  num_init_features: 24
   bn_size: 4
   compression: 0.5
 train:
-  epochs: 200
+  epochs: 300
   optimizer: sgd
   lr: 0.1
   weight_decay: 5e-4
@@ -32,5 +30,6 @@ train:
   nesterov: true
   scheduler: cosine
   warmup_epochs: 5
+  min_lr: 1e-5
   label_smoothing: 0.1
   mixup_alpha: 0.2

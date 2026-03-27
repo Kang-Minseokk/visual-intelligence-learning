@@ -96,16 +96,29 @@ def get_dataset_loaders(
     num_classes: int = 100,
     dataset_name: str = "CIFAR100",
     label_level: str = "coarse",
+    randaugment_enable: bool = False,
+    randaugment_num_ops: int = 2,
+    randaugment_magnitude: int = 9,
 ):  
     batch_size = batch_size        
         
     if dataset_name == "CIFAR100":
-        train_transform = transforms.Compose([
+        train_ops = [
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
+        ]
+        if randaugment_enable:
+            train_ops.append(
+                transforms.RandAugment(
+                    num_ops=int(randaugment_num_ops),
+                    magnitude=int(randaugment_magnitude),
+                )
+            )
+        train_ops.extend([
             transforms.ToTensor(),
             transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
         ])
+        train_transform = transforms.Compose(train_ops)
         eval_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),

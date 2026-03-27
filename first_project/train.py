@@ -78,6 +78,7 @@ def main():
         start = time.time()
 
         trainer.train_one_epoch(train_loader, epoch)
+        trainer.step_scheduler()
         
         torch.cuda.synchronize()
         end = time.time()
