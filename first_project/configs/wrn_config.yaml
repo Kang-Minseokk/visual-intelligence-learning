@@ -1,4 +1,4 @@
-seed: 42
+﻿seed: 42
 output_dir: logs
 data:
   root: ./data
@@ -17,8 +17,8 @@ model:
   dropout: 0.3
   num_classes: 100
   depth: 2
-  wrn_depth: 28 # WRN 전용
-  widen_factor: 10 # WRN 전용
+  wrn_depth: 28 # WRN only
+  widen_factor: 10 # WRN only
 train:
   epochs: 300
   optimizer: sgd

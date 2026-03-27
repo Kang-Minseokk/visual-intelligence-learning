@@ -45,7 +45,7 @@ def build_dataset_loaders(cfg):
 def build_model(cfg, device, model_name: str, in_features=None):
     input_shape = eval(str(in_features))
 
-    if model_name == "base":
+    if model_name == 'base':
         if isinstance(input_shape, (tuple, list)):
             base_in_features = int(input_shape[0])
         else:
@@ -58,9 +58,9 @@ def build_model(cfg, device, model_name: str, in_features=None):
             dropout=cfg['model']['dropout'],
             num_classes=cfg['model']['num_classes'],
         )
-    elif model_name == "wideresnet":
+    elif model_name == 'wideresnet':
         if len(input_shape) != 3:
-            raise ValueError(f"WideResNet expects 3D image input (C,H,W), got: {input_shape}")
+            raise ValueError(f'WideResNet expects 3D image input (C,H,W), got: {input_shape}')
 
         model = WideResNet(
             in_channels=int(input_shape[0]),
@@ -69,9 +69,9 @@ def build_model(cfg, device, model_name: str, in_features=None):
             dropout=float(cfg['model'].get('dropout', 0.0)),
             num_classes=int(cfg['model']['num_classes']),
         )
-    elif model_name == "densenet":
+    elif model_name == 'densenet':
         if len(input_shape) != 3:
-            raise ValueError(f"DenseNet expects 3D image input (C,H,W), got: {input_shape}")
+            raise ValueError(f'DenseNet expects 3D image input (C,H,W), got: {input_shape}')
 
         block_config = cfg['model'].get('dense_block_config', [6, 12, 24, 16])
         model = DenseNet(
@@ -84,9 +84,9 @@ def build_model(cfg, device, model_name: str, in_features=None):
             drop_rate=float(cfg['model'].get('dropout', 0.0)),
             compression=float(cfg['model'].get('compression', 0.5)),
         )
-    elif model_name == "densenet_bc_100_12":
+    elif model_name == 'densenet_bc_100_12':
         if len(input_shape) != 3:
-            raise ValueError(f"DenseNet-BC(100,12) expects 3D image input (C,H,W), got: {input_shape}")
+            raise ValueError(f'DenseNet-BC(100,12) expects 3D image input (C,H,W), got: {input_shape}')
 
         model = DenseNetBC100x12(
             in_channels=int(input_shape[0]),
@@ -96,9 +96,9 @@ def build_model(cfg, device, model_name: str, in_features=None):
             drop_rate=float(cfg['model'].get('dropout', 0.0)),
             compression=float(cfg['model'].get('compression', 0.5)),
         )
-    elif model_name == "densenet_bc_100_12_last":
+    elif model_name == 'densenet_bc_100_12_last':
         if len(input_shape) != 3:
-            raise ValueError(f"DenseNet-BC(100,12) expects 3D image input (C,H,W), got: {input_shape}")
+            raise ValueError(f'DenseNet-BC(100,12) expects 3D image input (C,H,W), got: {input_shape}')
 
         model = DenseNetBC100x12Last(
             in_channels=int(input_shape[0]),
@@ -108,11 +108,11 @@ def build_model(cfg, device, model_name: str, in_features=None):
             drop_rate=float(cfg['model'].get('dropout', 0.0)),
             compression=float(cfg['model'].get('compression', 0.5)),
         )
-    elif model_name == "pyramidnet":
+    elif model_name == 'pyramidnet':
         if PyramidNet is None:
-            raise ModuleNotFoundError("PyramidNet module is not available: src/models/net/pyramidnet.py")
+            raise ModuleNotFoundError('PyramidNet module is not available: src/models/net/pyramidnet.py')
         if len(input_shape) != 3:
-            raise ValueError(f"PyramidNet expects 3D image input (C,H,W), got: {input_shape}")
+            raise ValueError(f'PyramidNet expects 3D image input (C,H,W), got: {input_shape}')
 
         model = PyramidNet(
             in_channels=int(input_shape[0]),
@@ -122,9 +122,9 @@ def build_model(cfg, device, model_name: str, in_features=None):
             dropout=float(cfg['model'].get('dropout', 0.0)),
         )
     else:
-        raise ValueError(f"Unknown model name: {model_name}")
+        raise ValueError(f'Unknown model name: {model_name}')
 
-    print(f"[OK] Model Check!\n{model}")
+    print(f'[OK] Model Check!\n{model}')
     return model.to(device)
 
 
@@ -141,11 +141,10 @@ def build_trainer(model, device, out_dir, cfg):
 
 
 def build_writer(cfg):
-    log_dir = Path(cfg["output_dir"])
+    log_dir = Path(cfg['output_dir'])
     log_dir.mkdir(parents=True, exist_ok=True)
     return SummaryWriter(log_dir=str(log_dir))
 
 
 def build_device(cfg):
     return torch.device(cfg['train']['device'] if torch.cuda.is_available() else 'cpu')
-

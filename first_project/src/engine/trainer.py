@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import copy
 from pathlib import Path
@@ -16,29 +16,29 @@ class Trainer:
         self.device = device
         self.config = config or {}
 
-        optimizer_name = str(self.config.get("optimizer", "sgd")).lower()
-        if optimizer_name == "sgd":
+        optimizer_name = str(self.config.get('optimizer', 'sgd')).lower()
+        if optimizer_name == 'sgd':
             self.optimizer = SGD(
                 model.parameters(),
                 lr=float(lr),
-                momentum=float(self.config.get("momentum", 0.9)),
+                momentum=float(self.config.get('momentum', 0.9)),
                 weight_decay=float(weight_decay),
-                nesterov=bool(self.config.get("nesterov", True)),
+                nesterov=bool(self.config.get('nesterov', True)),
             )
-        elif optimizer_name == "adam":
+        elif optimizer_name == 'adam':
             self.optimizer = Adam(model.parameters(), lr=float(lr), weight_decay=float(weight_decay))
         else:
-            raise ValueError(f"Unsupported optimizer: {optimizer_name}")
+            raise ValueError(f'Unsupported optimizer: {optimizer_name}')
 
-        label_smoothing = float(self.config.get("label_smoothing", 0.0))
+        label_smoothing = float(self.config.get('label_smoothing', 0.0))
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-        self.mixup_alpha = float(self.config.get("mixup_alpha", 0.0))
-        self.cutmix_alpha = float(self.config.get("cutmix_alpha", 0.0))
-        self.cutmix_prob = float(self.config.get("cutmix_prob", 0.0))
+        self.mixup_alpha = float(self.config.get('mixup_alpha', 0.0))
+        self.cutmix_alpha = float(self.config.get('cutmix_alpha', 0.0))
+        self.cutmix_prob = float(self.config.get('cutmix_prob', 0.0))
 
-        self.eval_with_ema = bool(self.config.get("eval_with_ema", True))
-        self.ema_decay = float(self.config.get("ema_decay", 0.0))
+        self.eval_with_ema = bool(self.config.get('eval_with_ema', True))
+        self.ema_decay = float(self.config.get('ema_decay', 0.0))
         self.ema_model = None
         if self.ema_decay > 0.0:
             self.ema_model = copy.deepcopy(self.model).to(self.device)
@@ -51,19 +51,19 @@ class Trainer:
 
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        ckpt_dir = out_dir / "checkpoints"
+        ckpt_dir = out_dir / 'checkpoints'
         self.model.set_output_dir(str(ckpt_dir))
 
     def _build_scheduler(self):
-        scheduler_name = str(self.config.get("scheduler", "cosine")).lower()
-        if scheduler_name in {"none", "off", ""}:
+        scheduler_name = str(self.config.get('scheduler', 'cosine')).lower()
+        if scheduler_name in {'none', 'off', ''}:
             return None
-        if scheduler_name != "cosine":
-            raise ValueError(f"Unsupported scheduler: {scheduler_name}")
+        if scheduler_name != 'cosine':
+            raise ValueError(f'Unsupported scheduler: {scheduler_name}')
 
-        total_epochs = int(self.config.get("epochs", 1))
-        warmup_epochs = int(self.config.get("warmup_epochs", 0))
-        min_lr = float(self.config.get("min_lr", 0.0))
+        total_epochs = int(self.config.get('epochs', 1))
+        warmup_epochs = int(self.config.get('warmup_epochs', 0))
+        min_lr = float(self.config.get('min_lr', 0.0))
 
         if total_epochs <= 0:
             return None
@@ -159,7 +159,7 @@ class Trainer:
     def train_one_epoch(self, loader, epoch: int, track_flips: bool = False):
         self.model.train()
         running_loss = 0.0
-        progress_bar = tqdm(loader, desc=f"train epoch {epoch}")
+        progress_bar = tqdm(loader, desc=f'train epoch {epoch}')
 
         for step, (x, y) in enumerate(progress_bar):
             x, y = x.to(self.device), y.to(self.device)
@@ -179,7 +179,7 @@ class Trainer:
 
             running_loss += loss.item()
             if step % self.log_interval == 0:
-                current_lr = self.optimizer.param_groups[0]["lr"]
-                progress_bar.set_postfix({"Loss": f"{loss.item():.5f}", "LR": f"{current_lr:.6f}"})
+                current_lr = self.optimizer.param_groups[0]['lr']
+                progress_bar.set_postfix({'Loss': f'{loss.item():.5f}', 'LR': f'{current_lr:.6f}'})
 
         return running_loss / (step + 1)
