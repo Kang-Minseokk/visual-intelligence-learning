@@ -62,6 +62,7 @@ def build_model(cfg, device, model_name: str, in_features=None):
             widen_factor=int(cfg['model'].get('widen_factor', 2)),
             dropout=float(cfg['model'].get('dropout', 0.0)),
             num_classes=int(cfg['model']['num_classes']),
+            num_coarse_classes=int(cfg['model'].get('num_coarse_classes', 20)),
         )
     elif model_name == "densenet":
         if len(input_shape) != 3:
@@ -96,7 +97,7 @@ def build_model(cfg, device, model_name: str, in_features=None):
     return model.to(device)
 
 
-def build_trainer(model, device, out_dir, cfg):
+def build_trainer(model, device, out_dir, cfg, label_info=None):
     """
         학습과 관련된 메서드를 저장하고 있는 객체인
         Trainer를 만들어내는 빌더 함수입니다.
@@ -109,6 +110,7 @@ def build_trainer(model, device, out_dir, cfg):
         log_interval=cfg['train']['log_interval'],
         out_dir=out_dir,
         config=cfg['train'],
+        label_info=label_info,
     )
     
     

@@ -12,6 +12,7 @@ class WideResNet(ModelUtilMixin):
         widen_factor: int = 10,
         dropout: float = 0.0,
         num_classes: int = 10,
+        num_coarse_classes: int = 20,
     ):
         super().__init__()
 
@@ -37,10 +38,22 @@ class WideResNet(ModelUtilMixin):
             nn.ReLU(inplace=True),
         )
 
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
         self.classifier = nn.Sequential(
+            self.pool,
+            nn.Flatten(),
+            nn.Linear(widths[3], num_classes),
+        )
+
+        self.fine_head = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
             nn.Linear(widths[3], num_classes),
+        )
+        self.coarse_head = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(widths[3], int(num_coarse_classes)),
         )
 
     @staticmethod
@@ -49,3 +62,11 @@ class WideResNet(ModelUtilMixin):
         for _ in range(1, num_blocks):
             layers.append(WideBasicBlock(out_channels, out_channels, stride=1, dropout=dropout))
         return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.flatten(x)
+        h = self.feature_extractor(x)
+        return {
+            "fine_logits": self.fine_head(h),
+            "coarse_logits": self.coarse_head(h),
+        }

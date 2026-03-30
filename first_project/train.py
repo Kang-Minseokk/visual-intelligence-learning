@@ -24,21 +24,27 @@ def _log_epoch_metrics(
     train_top1,
     train_top5,
     train_superclass,
+    train_coarse_top1,
     valid_loss,
     valid_top1,
     valid_top5,
     valid_superclass,
+    valid_coarse_top1,
 ):
     writer.add_scalar("Train/Loss", float(train_loss), epoch)
     writer.add_scalar("Train/Top1", float(train_top1), epoch)
     writer.add_scalar("Train/Top5", float(train_top5), epoch)
     if train_superclass is not None:
         writer.add_scalar("Train/SuperclassMatchAt5", float(train_superclass), epoch)
+    if train_coarse_top1 is not None:
+        writer.add_scalar("Train/CoarseTop1", float(train_coarse_top1), epoch)
     writer.add_scalar("Valid/Loss", float(valid_loss), epoch)
     writer.add_scalar("Valid/Top1", float(valid_top1), epoch)
     writer.add_scalar("Valid/Top5", float(valid_top5), epoch)
     if valid_superclass is not None:
         writer.add_scalar("Valid/SuperclassMatchAt5", float(valid_superclass), epoch)
+    if valid_coarse_top1 is not None:
+        writer.add_scalar("Valid/CoarseTop1", float(valid_coarse_top1), epoch)
 
 
 def _log_model_graph(writer, model, cfg, device, input_dim):
@@ -61,10 +67,11 @@ def main():
     train_loader, valid_loader, test_loader, input_dim, classes, label_info = build_dataset_loaders(cfg)
     cfg['model']['input_dim'] = input_dim
     cfg['model']['num_classes'] = len(classes)
+    cfg['model']['num_coarse_classes'] = int(cfg['model'].get('num_coarse_classes', len((label_info or {}).get('coarse_classes', [])) or 20))
 
     model_name = cfg['model'].get('name', 'base')
     model = build_model(cfg, device, model_name, input_dim)     
-    trainer = build_trainer(model, device, out_dir, cfg)
+    trainer = build_trainer(model, device, out_dir, cfg, label_info=label_info)
     evaluator = Evaluator(model=model, device=device)
 
     writer = build_writer(cfg)
@@ -111,17 +118,23 @@ def main():
         train_top1 = train_metrics["top1"]
         train_top5 = train_metrics["top5"]
         train_super = train_metrics.get("superclass_match@5")
+        train_coarse_top1 = train_metrics.get("coarse_top1")
         valid_loss = valid_metrics["loss"]
         valid_top1 = valid_metrics["top1"]
         valid_top5 = valid_metrics["top5"]
         valid_super = valid_metrics.get("superclass_match@5")
+        valid_coarse_top1 = valid_metrics.get("coarse_top1")
 
         train_line = f"train_loss: {train_loss:.4f} | train_top1: {train_top1:.4f} | train_top5: {train_top5:.4f}"
         if train_super is not None:
             train_line += f" | train_superclass_match@5: {train_super:.4f}"
+        if train_coarse_top1 is not None:
+            train_line += f" | train_coarse_top1: {train_coarse_top1:.4f}"
         valid_line = f"valid_loss: {valid_loss:.4f} | valid_top1: {valid_top1:.4f} | valid_top5: {valid_top5:.4f}"
         if valid_super is not None:
             valid_line += f" | valid_superclass_match@5: {valid_super:.4f}"
+        if valid_coarse_top1 is not None:
+            valid_line += f" | valid_coarse_top1: {valid_coarse_top1:.4f}"
         print(train_line)
         print(valid_line)
 
@@ -132,10 +145,12 @@ def main():
             train_top1,
             train_top5,
             train_super,
+            train_coarse_top1,
             valid_loss,
             valid_top1,
             valid_top5,
             valid_super,
+            valid_coarse_top1,
         )            
  
     # === TB: 종료 ===
@@ -157,6 +172,8 @@ def main():
     )
     if "superclass_match@5" in test_metrics:
         test_line += f" | test_superclass_match@5: {test_metrics['superclass_match@5']:.4f}"
+    if "coarse_top1" in test_metrics:
+        test_line += f" | test_coarse_top1: {test_metrics['coarse_top1']:.4f}"
     print(test_line)
 
 

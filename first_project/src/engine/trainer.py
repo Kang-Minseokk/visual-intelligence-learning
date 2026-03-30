@@ -7,11 +7,13 @@ from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 class Trainer:
-    def __init__(self, model, device, lr: float, weight_decay: float, log_interval: int, out_dir: str, config=None):
+    def __init__(self, model, device, lr: float, weight_decay: float, log_interval: int, out_dir: str, config=None, label_info=None):
         self.model = model.to(device)
         self.device = device
         self.optimizer = Adam(model.parameters(), lr=float(lr), weight_decay=float(weight_decay))
         self.config = config or {}
+        self.label_info = label_info or {}
+        self.fine_to_coarse = self._build_fine_to_coarse_tensor(self.label_info.get("fine_to_coarse"))
         
         optimizer_name = str(self.config.get("optimizer", "sgd")).lower()
         if optimizer_name == "sgd":
@@ -30,6 +32,7 @@ class Trainer:
         label_smoothing = float(self.config.get("label_smoothing", 0.0))
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.mixup_alpha = float(self.config.get("mixup_alpha", 0.0))
+        self.lambda_coarse = float(self.config.get("lambda_coarse", 1.0))
         self.scheduler = self._build_scheduler()
         self.log_interval = log_interval
         
@@ -38,6 +41,26 @@ class Trainer:
 
         ckpt_dir = out_dir / 'checkpoints'
         self.model.set_output_dir(str(ckpt_dir))
+
+    def _build_fine_to_coarse_tensor(self, fine_to_coarse):
+        if fine_to_coarse is None:
+            return None
+        return torch.tensor([int(v) for v in fine_to_coarse], dtype=torch.long, device=self.device)
+
+    def _to_coarse_targets(self, fine_targets):
+        if self.fine_to_coarse is None:
+            raise ValueError("fine_to_coarse mapping is required for coarse loss.")
+        return self.fine_to_coarse[fine_targets]
+
+    @staticmethod
+    def _extract_logits(outputs):
+        if isinstance(outputs, dict):
+            fine_logits = outputs.get("fine_logits")
+            coarse_logits = outputs.get("coarse_logits")
+            if fine_logits is None:
+                raise ValueError("Model output dict must include 'fine_logits'.")
+            return fine_logits, coarse_logits
+        return outputs, None
         
     def _build_scheduler(self):
         scheduler_name = str(self.config.get("scheduler", "cosine")).lower()
@@ -102,21 +125,43 @@ class Trainer:
     def train_one_epoch(self, loader, epoch: int, track_flips: bool = False):
         self.model.train()
         running_loss = 0.0
+        running_fine_loss = 0.0
+        running_coarse_loss = 0.0
         progress_bar = tqdm(loader, desc=f"train epoch {epoch}")
         for step, (x, y) in enumerate(progress_bar):            
                         
             x, y = x.to(self.device), y.to(self.device)
             x, y_a, y_b, lam = self._apply_mixup(x, y)
-            logits = self.model(x)            
-            loss = lam * self.criterion(logits, y_a) + (1.0 - lam) * self.criterion(logits, y_b)
+            outputs = self.model(x)
+            fine_logits, coarse_logits = self._extract_logits(outputs)
+
+            fine_loss = lam * self.criterion(fine_logits, y_a) + (1.0 - lam) * self.criterion(fine_logits, y_b)
+            coarse_loss = None
+            if coarse_logits is not None and self.lambda_coarse > 0.0:
+                coarse_y_a = self._to_coarse_targets(y_a)
+                coarse_y_b = self._to_coarse_targets(y_b)
+                coarse_loss = lam * self.criterion(coarse_logits, coarse_y_a) + (1.0 - lam) * self.criterion(coarse_logits, coarse_y_b)
+                loss = fine_loss + self.lambda_coarse * coarse_loss
+            else:
+                loss = fine_loss
             
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
 
             running_loss += loss.item()
+            running_fine_loss += fine_loss.item()
+            if coarse_loss is not None:
+                running_coarse_loss += coarse_loss.item()
             if step % self.log_interval == 0:
                 current_lr = self.optimizer.param_groups[0]["lr"]
-                progress_bar.set_postfix({"Loss": f"{loss.item():.5f}", "LR": f"{current_lr:.6f}"})
+                postfix = {
+                    "Loss": f"{loss.item():.5f}",
+                    "Fine": f"{fine_loss.item():.5f}",
+                    "LR": f"{current_lr:.6f}",
+                }
+                if coarse_loss is not None:
+                    postfix["Coarse"] = f"{coarse_loss.item():.5f}"
+                progress_bar.set_postfix(postfix)
         
         return running_loss / (step + 1)
