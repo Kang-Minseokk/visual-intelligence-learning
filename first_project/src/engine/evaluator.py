@@ -1,7 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
+
 import torch
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
+
 
 class Evaluator:
     def __init__(self, model, device):
@@ -10,15 +12,15 @@ class Evaluator:
         self.criterion = CrossEntropyLoss()
 
     @torch.no_grad()
-    def evaluate(self, loader, classes=None, label_info=None, topk: int = 5, log_sample_topk: bool = False, split_name: str = "eval"):
+    def evaluate(self, loader, classes=None, label_info=None, topk: int = 5, log_sample_topk: bool = False, split_name: str = 'eval'):
         self.model.eval()
         total_loss, total_top1, total_topk, total_superclass_match, n = 0.0, 0.0, 0.0, 0.0, 0
         has_superclass_metric = False
         logged_sample = False
 
-        fine_to_coarse = (label_info or {}).get("fine_to_coarse")
-        fine_classes = (label_info or {}).get("fine_classes")
-        label_level = (label_info or {}).get("label_level")
+        fine_to_coarse = (label_info or {}).get('fine_to_coarse')
+        fine_classes = (label_info or {}).get('fine_classes')
+        label_level = (label_info or {}).get('label_level')
 
         for x, y in tqdm(loader, desc='eval'):
             x, y = x.to(self.device), y.to(self.device)
@@ -31,7 +33,6 @@ class Evaluator:
 
             top1_preds = logits.argmax(dim=1)
             top1_batch = (top1_preds == y).float().mean().item()
-
             in_topk = topk_labels.eq(y.unsqueeze(1)).any(dim=1).float().mean().item()
 
             superclass_match_batch = None
@@ -42,7 +43,7 @@ class Evaluator:
                     device=y.device,
                     dtype=torch.long,
                 )
-                if label_level == "fine":
+                if label_level == 'fine':
                     mapped_true = torch.tensor([int(fine_to_coarse[idx]) for idx in y.tolist()], device=y.device, dtype=torch.long)
                 else:
                     mapped_true = y
@@ -56,10 +57,10 @@ class Evaluator:
                     names = [str(idx) for idx in sample_labels.tolist()]
                 else:
                     names = [names_source[idx] for idx in sample_labels.tolist()]
-                pairs = [f"{name}: {prob:.4f}" for name, prob in zip(names, sample_probs.tolist())]
-                msg = f"[{split_name}] top-{k} probs -> " + ", ".join(pairs)
+                pairs = [f'{name}: {prob:.4f}' for name, prob in zip(names, sample_probs.tolist())]
+                msg = f'[{split_name}] top-{k} probs -> ' + ', '.join(pairs)
                 if superclass_match_batch is not None:
-                    msg += f" | superclass_match@{k}: {superclass_match_batch:.3f}"
+                    msg += f' | superclass_match@{k}: {superclass_match_batch:.3f}'
                 print(msg)
                 logged_sample = True
 
@@ -72,10 +73,10 @@ class Evaluator:
             n += bsz
 
         metrics = {
-            "loss": total_loss / n,
-            "top1": total_top1 / n,
-            "top5": total_topk / n,
+            'loss': total_loss / n,
+            'top1': total_top1 / n,
+            'top5': total_topk / n,
         }
         if has_superclass_metric:
-            metrics["superclass_match@5"] = total_superclass_match / n
+            metrics['superclass_match@5'] = total_superclass_match / n
         return metrics
