@@ -1,15 +1,18 @@
-from __future__ import annotations
-from torch.utils.data import DataLoader, Subset
-from torchvision import datasets, transforms
-import torch
-import numpy as np
-import random
+﻿from __future__ import annotations
+
 import os
 import pickle
+import random
+
+import numpy as np
+import torch
 from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Subset
+from torchvision import datasets, transforms
+
 
 def worker_init_fn(worker_id):
-    """각 worker process의 random seed를 고정합니다."""
+    """Keep worker RNG deterministic across dataloader workers."""
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
@@ -86,6 +89,7 @@ def _build_fine_to_coarse_map(fine_targets, coarse_targets, num_fine: int = 100)
         raise ValueError("Failed to build complete fine_to_coarse mapping.")
     return mapping
 
+
 def get_dataset_loaders(
     root: str,
     batch_size: int,
@@ -99,9 +103,8 @@ def get_dataset_loaders(
     randaugment_enable: bool = False,
     randaugment_num_ops: int = 2,
     randaugment_magnitude: int = 9,
-):  
-    batch_size = batch_size        
-        
+    no_validation: bool = False,
+):
     if dataset_name == "CIFAR100":
         train_ops = [
             transforms.RandomCrop(32, padding=4),
@@ -123,7 +126,7 @@ def get_dataset_loaders(
             transforms.ToTensor(),
             transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
         ])
-        
+
         train_base = datasets.CIFAR100(root=root, train=True, transform=train_transform, download=download)
         valid_base = datasets.CIFAR100(root=root, train=True, transform=eval_transform, download=download)
         test_base = datasets.CIFAR100(root=root, train=False, transform=eval_transform, download=download)
@@ -143,23 +146,26 @@ def get_dataset_loaders(
             classes = fine_classes
         else:
             raise ValueError(f"Invalid label_level: {label_level}. Use 'coarse' or 'fine'.")
-        
+
         indices = np.arange(len(train_base))
         targets = train_base.targets
-        train_idx, valid_idx = train_test_split(
-            indices,
-            test_size=0.1,
-            random_state=42,
-            stratify=targets
-        )
+        if no_validation:
+            train_idx = indices
+            valid_idx = np.array([], dtype=np.int64)
+        else:
+            train_idx, valid_idx = train_test_split(
+                indices,
+                test_size=0.1,
+                random_state=42,
+                stratify=targets,
+            )
         input_dim = (3, 32, 32)
-        
     else:
         raise ValueError(f"Invalid dataset_name: {dataset_name}")
 
     if k_train is None or k_train < 0:
         train_set = Subset(train_base, train_idx)
-        valid_set = Subset(valid_base, valid_idx)
+        valid_set = None if no_validation else Subset(valid_base, valid_idx)
         test_set = test_base
     else:
         effective_num_classes = len(classes)
@@ -167,25 +173,42 @@ def get_dataset_loaders(
         k_per_class_test = max(1, k_per_class_train // 10)
 
         train_set, train_counts = _make_balanced_subset(train_base, k_per_class_train, effective_num_classes)
-        valid_set = Subset(valid_base, valid_idx)
+        valid_set = None if no_validation else Subset(valid_base, valid_idx)
         test_set, test_counts = _make_balanced_subset(test_base, k_per_class_test, effective_num_classes)
 
         print(f"[{dataset_name}] TRAIN - total: {len(train_set)}, per-class: {dict(enumerate(train_counts))}")
         print(f"[{dataset_name}] TEST  - total: {len(test_set)}, per-class: {dict(enumerate(test_counts))}")
 
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True,
-                              num_workers=num_workers, pin_memory=True,
-                              generator=torch.Generator().manual_seed(seed),
-                              worker_init_fn=worker_init_fn)
-    
-    valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=True,
-                              num_workers=num_workers, pin_memory=True, 
-                              generator=torch.Generator().manual_seed(seed), 
-                              worker_init_fn=worker_init_fn)
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        generator=torch.Generator().manual_seed(seed),
+        worker_init_fn=worker_init_fn,
+    )
 
-    test_loader  = DataLoader(test_set,  batch_size=batch_size, shuffle=False,
-                              num_workers=num_workers, pin_memory=True,
-                              worker_init_fn=worker_init_fn)
+    valid_loader = None
+    if valid_set is not None:
+        valid_loader = DataLoader(
+            valid_set,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=True,
+            generator=torch.Generator().manual_seed(seed),
+            worker_init_fn=worker_init_fn,
+        )
+
+    test_loader = DataLoader(
+        test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+        worker_init_fn=worker_init_fn,
+    )
 
     label_info = {
         "label_level": label_level,

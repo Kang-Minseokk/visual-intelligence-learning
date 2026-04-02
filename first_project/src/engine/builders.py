@@ -1,14 +1,21 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 import torch
 
+from src.dataset.get_dataset import get_dataset_loaders
+from src.engine.trainer import Trainer
 from src.models.net.base import BaseNet
-from src.models.net.densenet_bc_100_12 import DenseNetBC100x12
 from src.models.net.densenet import DenseNet
+from src.models.net.densenet_bc_100_12 import DenseNetBC100x12
+from src.models.net.densenet_bc_100_12_last import DenseNetBC100x12Last
 from src.models.net.wideresnet import WideResNet
 from torch.utils.tensorboard import SummaryWriter
-from src.engine.trainer import Trainer
-from src.dataset.get_dataset import get_dataset_loaders
+
+try:
+    from src.models.net.pyramidnet import PyramidNet
+except ModuleNotFoundError:
+    PyramidNet = None
+
 
 def _dataset_loader_kwargs(cfg, *, download=None):
     k_train = cfg['data'].get('k_train', -1)
@@ -27,16 +34,15 @@ def _dataset_loader_kwargs(cfg, *, download=None):
         'randaugment_enable': bool(cfg['data'].get('randaugment_enable', False)),
         'randaugment_num_ops': int(cfg['data'].get('randaugment_num_ops', 2)),
         'randaugment_magnitude': int(cfg['data'].get('randaugment_magnitude', 9)),
+        'no_validation': bool(cfg['data'].get('no_validation', False)),
     }
+
 
 def build_dataset_loaders(cfg):
     return get_dataset_loaders(**_dataset_loader_kwargs(cfg))
 
 
 def build_model(cfg, device, model_name: str, in_features=None):
-    """
-        모델을 만들어내는 빌더 함수입니다.
-    """
     input_shape = eval(str(in_features))
 
     if model_name == "base":
@@ -48,7 +54,7 @@ def build_model(cfg, device, model_name: str, in_features=None):
         model = BaseNet(
             in_features=base_in_features,
             hidden_features=int(cfg['model']['hidden_features']),
-            depth=cfg['model']['depth'],            
+            depth=cfg['model']['depth'],
             dropout=cfg['model']['dropout'],
             num_classes=cfg['model']['num_classes'],
         )
@@ -90,18 +96,39 @@ def build_model(cfg, device, model_name: str, in_features=None):
             drop_rate=float(cfg['model'].get('dropout', 0.0)),
             compression=float(cfg['model'].get('compression', 0.5)),
         )
+    elif model_name == "densenet_bc_100_12_last":
+        if len(input_shape) != 3:
+            raise ValueError(f"DenseNet-BC(100,12) expects 3D image input (C,H,W), got: {input_shape}")
+
+        model = DenseNetBC100x12Last(
+            in_channels=int(input_shape[0]),
+            num_classes=int(cfg['model']['num_classes']),
+            growth_rate=int(cfg['model'].get('growth_rate', 12)),
+            bn_size=int(cfg['model'].get('bn_size', 4)),
+            drop_rate=float(cfg['model'].get('dropout', 0.0)),
+            compression=float(cfg['model'].get('compression', 0.5)),
+        )
+    elif model_name == "pyramidnet":
+        if PyramidNet is None:
+            raise ModuleNotFoundError("PyramidNet module is not available: src/models/net/pyramidnet.py")
+        if len(input_shape) != 3:
+            raise ValueError(f"PyramidNet expects 3D image input (C,H,W), got: {input_shape}")
+
+        model = PyramidNet(
+            in_channels=int(input_shape[0]),
+            num_classes=int(cfg['model']['num_classes']),
+            depth=int(cfg['model'].get('pyramid_depth', 110)),
+            alpha=int(cfg['model'].get('pyramid_alpha', 48)),
+            dropout=float(cfg['model'].get('dropout', 0.0)),
+        )
     else:
         raise ValueError(f"Unknown model name: {model_name}")
-    print(f"✅ Model Check!\n{model}")
 
+    print(f"[OK] Model Check!\n{model}")
     return model.to(device)
 
 
 def build_trainer(model, device, out_dir, cfg):
-    """
-        학습과 관련된 메서드를 저장하고 있는 객체인
-        Trainer를 만들어내는 빌더 함수입니다.
-    """
     return Trainer(
         model=model,
         device=device,
@@ -111,8 +138,8 @@ def build_trainer(model, device, out_dir, cfg):
         out_dir=out_dir,
         config=cfg['train'],
     )
-    
-    
+
+
 def build_writer(cfg):
     log_dir = Path(cfg["output_dir"])
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -121,3 +148,4 @@ def build_writer(cfg):
 
 def build_device(cfg):
     return torch.device(cfg['train']['device'] if torch.cuda.is_available() else 'cpu')
+

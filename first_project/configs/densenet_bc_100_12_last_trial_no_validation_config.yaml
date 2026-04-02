@@ -8,21 +8,21 @@ data:
   num_workers: 4
   batch_size: 64
   k_train: -1
+  no_validation: true
   randaugment_enable: true
   randaugment_num_ops: 2
-  randaugment_magnitude: 9
+  randaugment_magnitude: 7
 model:
-  name: "wideresnet"
-  hidden_features: 1024
-  dropout: 0.3
+  name: "densenet_bc_100_12_last"
   num_classes: 100
-  depth: 2
-  wrn_depth: 28 # WRN 전용
-  widen_factor: 10 # WRN 전용
+  dropout: 0.2
+  growth_rate: 12
+  bn_size: 4
+  compression: 0.5
 train:
   epochs: 300
   optimizer: sgd
-  lr: 1e-1
+  lr: 0.1
   weight_decay: 5e-4
   device: cuda
   log_interval: 235
@@ -30,7 +30,13 @@ train:
   momentum: 0.9
   nesterov: true
   scheduler: cosine
-  warmup_epochs: 5
-  min_lr: 1e-5
-  label_smoothing: 0.1
-  mixup_alpha: 0.0
+  warmup_epochs: 10
+  min_lr: 1e-6
+  label_smoothing: 0.02
+  mixup_alpha: 0.2
+  cutmix_alpha: 0.0
+  cutmix_prob: 0.0
+  ema_decay: 0.999
+  eval_with_ema: true
+  save_best: false
+  test_use_best: false

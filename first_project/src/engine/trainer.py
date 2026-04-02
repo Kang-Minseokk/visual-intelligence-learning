@@ -1,11 +1,14 @@
 from __future__ import annotations
+
 import copy
-from tqdm import tqdm
 from pathlib import Path
+
 import torch
 from torch import nn
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from tqdm import tqdm
+
 
 class Trainer:
     def __init__(self, model, device, lr: float, weight_decay: float, log_interval: int, out_dir: str, config=None):
@@ -33,6 +36,7 @@ class Trainer:
         self.mixup_alpha = float(self.config.get("mixup_alpha", 0.0))
         self.cutmix_alpha = float(self.config.get("cutmix_alpha", 0.0))
         self.cutmix_prob = float(self.config.get("cutmix_prob", 0.0))
+
         self.eval_with_ema = bool(self.config.get("eval_with_ema", True))
         self.ema_decay = float(self.config.get("ema_decay", 0.0))
         self.ema_model = None
@@ -44,11 +48,10 @@ class Trainer:
 
         self.scheduler = self._build_scheduler()
         self.log_interval = log_interval
-        
+
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-
-        ckpt_dir = out_dir / 'checkpoints'
+        ckpt_dir = out_dir / "checkpoints"
         self.model.set_output_dir(str(ckpt_dir))
 
     def _build_scheduler(self):
@@ -157,8 +160,8 @@ class Trainer:
         self.model.train()
         running_loss = 0.0
         progress_bar = tqdm(loader, desc=f"train epoch {epoch}")
-        for step, (x, y) in enumerate(progress_bar):            
-                        
+
+        for step, (x, y) in enumerate(progress_bar):
             x, y = x.to(self.device), y.to(self.device)
 
             if self.cutmix_alpha > 0.0 and torch.rand(1, device=x.device).item() < self.cutmix_prob:
@@ -168,7 +171,7 @@ class Trainer:
 
             logits = self.model(x)
             loss = lam * self.criterion(logits, y_a) + (1.0 - lam) * self.criterion(logits, y_b)
-            
+
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -178,5 +181,5 @@ class Trainer:
             if step % self.log_interval == 0:
                 current_lr = self.optimizer.param_groups[0]["lr"]
                 progress_bar.set_postfix({"Loss": f"{loss.item():.5f}", "LR": f"{current_lr:.6f}"})
-        
+
         return running_loss / (step + 1)
