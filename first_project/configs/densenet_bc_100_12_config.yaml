@@ -1,4 +1,4 @@
-seed: 42
+﻿seed: 42
 output_dir: logs
 data:
   root: ./data
@@ -19,7 +19,7 @@ model:
   bn_size: 4
   compression: 0.5
 train:
-  epochs: 400
+  epochs: 300
   optimizer: sgd
   lr: 0.1
   weight_decay: 5e-4
@@ -31,11 +31,12 @@ train:
   scheduler: cosine
   warmup_epochs: 5
   min_lr: 1e-5
-  label_smoothing: 0.05
-  mixup_alpha: 0.0
-  cutmix_alpha: 1.0
-  cutmix_prob: 0.5
+  label_smoothing: 0.1
+  mixup_alpha: 0.2
+  cutmix_alpha: 0.0
+  cutmix_prob: 0.0
   ema_decay: 0.999
   eval_with_ema: true
   save_best: true
   test_use_best: true
+

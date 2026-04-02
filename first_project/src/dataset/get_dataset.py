@@ -194,7 +194,7 @@ def get_dataset_loaders(
         valid_loader = DataLoader(
             valid_set,
             batch_size=batch_size,
-            shuffle=True,
+            shuffle=False,
             num_workers=num_workers,
             pin_memory=True,
             generator=torch.Generator().manual_seed(seed),
@@ -218,3 +218,4 @@ def get_dataset_loaders(
     }
 
     return train_loader, valid_loader, test_loader, input_dim, classes, label_info
+
