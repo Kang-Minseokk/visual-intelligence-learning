@@ -60,3 +60,35 @@ class ModelUtilMixin(nn.Module):
         h = self.feature_extractor(x)
         y = self.classifier(h)
         return y
+    
+class ViTLowbitClassifier(ModelUtilMixin, nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.to_patch_embedding = nn.Identity()
+        self.dropout = nn.Identity()
+        self.transformer = nn.Identity()
+        self.to_latent = nn.Identity()
+        self.mlp_head = nn.Identity()        
+
+    def forward(self, x: Tensor) -> Tensor:
+        h1 = self.to_patch_embedding(x)
+        h2 = self.dropout(h1)
+        h3 = self.transformer(h2)
+        h4 = self.to_latent(h3)
+        y = self.mlp_head(h4)
+        return y
+
+    def get_parameters_data(self):
+        # get parameters for logging or analysis
+        to_patch_embedding = list(self.to_patch_embedding.parameters())
+        dropout = list(self.dropout.parameters())
+        transformer = list(self.transformer.parameters())
+        to_latent = list(self.to_latent.parameters())
+        mlp_head = list(self.mlp_head.parameters())
+        return {
+            'to_patch_embedding': to_patch_embedding,
+            'dropout': dropout,
+            'transformer': transformer,
+            'to_latent': to_latent,
+            'mlp_head': mlp_head
+        }

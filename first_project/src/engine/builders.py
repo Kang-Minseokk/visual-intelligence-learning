@@ -6,6 +6,7 @@ from src.models.net.base import BaseNet
 from src.models.net.densenet import DenseNet
 from src.models.net.pyramidnet import PyramidNet
 from src.models.net.wideresnet import WideResNet
+from src.models.net.vit import ViT
 from torch.utils.tensorboard import SummaryWriter
 from src.engine.trainer import Trainer
 from src.dataset.get_dataset import get_dataset_loaders
@@ -89,6 +90,18 @@ def build_model(cfg, device, model_name: str, in_features=None):
             depth=int(cfg['model'].get('pyramid_depth', 110)),
             alpha=int(cfg['model'].get('pyramid_alpha', 48)),
             dropout=float(cfg['model'].get('dropout', 0.0)),
+        )
+    elif model_name == "vit":
+        model = ViT(
+            image_size=32,
+            patch_size=16, 
+            num_classes=int(cfg['model']['num_classes']),
+            dim=1024,
+            depth=6,
+            heads=16,
+            mlp_dim = 2048,
+            dropout=0.1,
+            emb_dropout=0.1,                        
         )
     else:
         raise ValueError(f"Unknown model name: {model_name}")
