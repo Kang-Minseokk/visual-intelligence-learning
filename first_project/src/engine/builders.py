@@ -23,7 +23,7 @@ def _dataset_loader_kwargs(cfg, *, download=None):
         'seed': cfg['seed'],
         'k_train': k_train,
         'num_classes': int(cfg['model']['num_classes']),
-        'dataset_name': str(cfg['data'].get('name', 'FashionMNIST')),
+        'dataset_name': str(cfg['data'].get('name', 'CIFAR100')),
         'label_level': str(cfg['data'].get('label_level', 'coarse')),
         'randaugment_enable': bool(cfg['data'].get('randaugment_enable', False)),
         'randaugment_num_ops': int(cfg['data'].get('randaugment_num_ops', 2)),
@@ -92,16 +92,23 @@ def build_model(cfg, device, model_name: str, in_features=None):
             dropout=float(cfg['model'].get('dropout', 0.0)),
         )
     elif model_name == "vit":
+        if len(input_shape) != 3:
+            raise ValueError(f"ViT expects 3D image input (C,H,W), got: {input_shape}")
+
+        in_channels = int(input_shape[0])
+        image_size = int(input_shape[1])
+
         model = ViT(
-            image_size=32,
-            patch_size=16, 
+            image_size=int(cfg['model'].get('image_size', image_size)),
+            patch_size=int(cfg['model'].get('patch_size', 4)),
             num_classes=int(cfg['model']['num_classes']),
-            dim=1024,
-            depth=6,
-            heads=16,
-            mlp_dim = 2048,
-            dropout=0.1,
-            emb_dropout=0.1,                        
+            dim=int(cfg['model'].get('vit_dim', 768)),
+            depth=int(cfg['model'].get('vit_depth', 12)),
+            heads=int(cfg['model'].get('vit_heads', 12)),
+            mlp_dim=int(cfg['model'].get('vit_mlp_dim', 3072)),
+            channels=int(cfg['model'].get('in_channels', in_channels)),
+            dropout=float(cfg['model'].get('dropout', 0.1)),
+            emb_dropout=float(cfg['model'].get('emb_dropout', 0.1)),
         )
     else:
         raise ValueError(f"Unknown model name: {model_name}")

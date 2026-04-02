@@ -3,6 +3,7 @@ from tqdm import tqdm
 from pathlib import Path
 from torch import nn
 import torch
+import torch.nn.functional as F
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
@@ -33,6 +34,9 @@ class Trainer:
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.mixup_alpha = float(self.config.get("mixup_alpha", 0.0))
         self.lambda_coarse = float(self.config.get("lambda_coarse", 1.0))
+        self.coarse_warmup_epochs = int(self.config.get("coarse_warmup_epochs", 0))
+        self.lambda_hier = float(self.config.get("lambda_hier", 0.0))
+        self.hier_temperature = float(self.config.get("hier_temperature", 1.0))
         self.scheduler = self._build_scheduler()
         self.log_interval = log_interval
         
@@ -51,6 +55,39 @@ class Trainer:
         if self.fine_to_coarse is None:
             raise ValueError("fine_to_coarse mapping is required for coarse loss.")
         return self.fine_to_coarse[fine_targets]
+
+    def _current_lambda_coarse(self, epoch: int) -> float:
+        if self.coarse_warmup_epochs <= 0:
+            return self.lambda_coarse
+        warmup_ratio = min(1.0, float(max(epoch, 1)) / float(self.coarse_warmup_epochs))
+        return self.lambda_coarse * warmup_ratio
+
+    def _coarse_probs_from_fine_logits(self, fine_logits: torch.Tensor) -> torch.Tensor:
+        if self.fine_to_coarse is None:
+            raise ValueError("fine_to_coarse mapping is required for hierarchy consistency loss.")
+
+        fine_probs = F.softmax(fine_logits, dim=1)
+        num_coarse = int(self.fine_to_coarse.max().item()) + 1
+        coarse_probs = torch.zeros(
+            fine_probs.size(0),
+            num_coarse,
+            device=fine_probs.device,
+            dtype=fine_probs.dtype,
+        )
+        coarse_index = self.fine_to_coarse.unsqueeze(0).expand(fine_probs.size(0), -1)
+        coarse_probs.scatter_add_(1, coarse_index, fine_probs)
+        return coarse_probs
+
+    def _hierarchy_consistency_loss(self, fine_logits: torch.Tensor, coarse_logits: torch.Tensor):
+        if self.fine_to_coarse is None:
+            return None
+
+        temperature = max(1e-6, self.hier_temperature)
+        with torch.no_grad():
+            coarse_target_probs = self._coarse_probs_from_fine_logits(fine_logits)
+
+        coarse_log_probs = F.log_softmax(coarse_logits / temperature, dim=1)
+        return F.kl_div(coarse_log_probs, coarse_target_probs, reduction="batchmean") * (temperature ** 2)
 
     @staticmethod
     def _extract_logits(outputs):
@@ -127,6 +164,8 @@ class Trainer:
         running_loss = 0.0
         running_fine_loss = 0.0
         running_coarse_loss = 0.0
+        running_hier_loss = 0.0
+        current_lambda_coarse = self._current_lambda_coarse(epoch)
         progress_bar = tqdm(loader, desc=f"train epoch {epoch}")
         for step, (x, y) in enumerate(progress_bar):            
                         
@@ -137,13 +176,19 @@ class Trainer:
 
             fine_loss = lam * self.criterion(fine_logits, y_a) + (1.0 - lam) * self.criterion(fine_logits, y_b)
             coarse_loss = None
+            hier_loss = None
             if coarse_logits is not None and self.lambda_coarse > 0.0:
                 coarse_y_a = self._to_coarse_targets(y_a)
                 coarse_y_b = self._to_coarse_targets(y_b)
                 coarse_loss = lam * self.criterion(coarse_logits, coarse_y_a) + (1.0 - lam) * self.criterion(coarse_logits, coarse_y_b)
-                loss = fine_loss + self.lambda_coarse * coarse_loss
+                loss = fine_loss + current_lambda_coarse * coarse_loss
             else:
                 loss = fine_loss
+
+            if coarse_logits is not None and self.lambda_hier > 0.0:
+                hier_loss = self._hierarchy_consistency_loss(fine_logits, coarse_logits)
+                if hier_loss is not None:
+                    loss = loss + self.lambda_hier * hier_loss
             
             self.optimizer.zero_grad()
             loss.backward()
@@ -153,15 +198,20 @@ class Trainer:
             running_fine_loss += fine_loss.item()
             if coarse_loss is not None:
                 running_coarse_loss += coarse_loss.item()
+            if hier_loss is not None:
+                running_hier_loss += hier_loss.item()
             if step % self.log_interval == 0:
                 current_lr = self.optimizer.param_groups[0]["lr"]
                 postfix = {
                     "Loss": f"{loss.item():.5f}",
                     "Fine": f"{fine_loss.item():.5f}",
                     "LR": f"{current_lr:.6f}",
+                    "LamC": f"{current_lambda_coarse:.3f}",
                 }
                 if coarse_loss is not None:
                     postfix["Coarse"] = f"{coarse_loss.item():.5f}"
+                if hier_loss is not None:
+                    postfix["Hier"] = f"{hier_loss.item():.5f}"
                 progress_bar.set_postfix(postfix)
         
         return running_loss / (step + 1)
