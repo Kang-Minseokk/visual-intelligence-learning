@@ -34,8 +34,5 @@ train:
   warmup_epochs: 5
   min_lr: 1e-5
   label_smoothing: 0.0
-  mixup_alpha: 0.1
-  lambda_coarse: 1.0
-  coarse_warmup_epochs: 30
-  lambda_hier: 0.3
-  hier_temperature: 1.0
+  mixup_alpha: 0.0 # 이거 위험해요!
+  lambda_coarse: 0.5

@@ -10,94 +10,98 @@ class Evaluator:
         self.criterion = CrossEntropyLoss()
 
     @staticmethod
-    def get_cifar100_superclass_mapping():
-        super_classes = [
-            [4, 30, 55, 72, 95],        # aquatic mammals
-            [1, 32, 67, 73, 91],        # fish
-            [54, 62, 70, 82, 92],       # flowers
-            [9, 10, 16, 28, 61],        # food containers
-            [0, 51, 53, 57, 83],        # fruit and vegetables
-            [22, 39, 40, 86, 87],       # household electrical devices
-            [5, 20, 25, 84, 94],        # household furniture
-            [6, 7, 14, 18, 24],         # insects
-            [3, 42, 43, 88, 97],        # large carnivores
-            [12, 17, 37, 68, 76],       # large man-made outdoor things
-            [23, 33, 49, 60, 71],       # large natural outdoor scenes
-            [15, 19, 21, 31, 38],       # large omnivores and herbivores
-            [34, 63, 64, 66, 75],       # medium-sized mammals
-            [26, 45, 77, 79, 99],       # non-insect invertebrates
-            [2, 11, 35, 46, 98],        # people
-            [27, 29, 44, 78, 93],       # reptiles
-            [36, 50, 65, 74, 80],       # small mammals
-            [47, 52, 56, 59, 96],       # trees
-            [8, 13, 48, 58, 90],        # vehicles 1
-            [41, 69, 81, 85, 89],       # vehicles 2
-        ]
+    def _extract_logits(outputs):
+        if isinstance(outputs, dict):
+            fine_logits = outputs.get("fine_logits")
+            coarse_logits = outputs.get("coarse_logits")
+            if fine_logits is None:
+                raise ValueError("Model output dict must include 'fine_logits'.")
+            return fine_logits, coarse_logits
+        return outputs, None
 
-        mapping = {}
-        for super_idx, fine_list in enumerate(super_classes):
-            for fine in fine_list:
-                mapping[fine] = super_idx
-
-        return mapping
-
-    @staticmethod
-    def acc_top1(output, target):
-        _, pred = output.topk(1, dim=1, largest=True, sorted=True)
-        pred = pred.squeeze(1)
-        correct = pred.eq(target).float().sum()
-        return correct
-
-    @staticmethod
-    def super_class_accuracy(output, target, class_to_super, k=5):
-        _, pred = output.topk(k, dim=1, largest=True, sorted=True)
-
-        target_super = torch.tensor(
-            [class_to_super[t.item()] for t in target],
-            device=target.device
-        )
-
-        pred_super = torch.tensor(
-            [[class_to_super[p.item()] for p in row] for row in pred],
-            device=target.device
-        )
-
-        match = pred_super.eq(target_super.unsqueeze(1))
-        score = match.float().sum(dim=1) / k
-
-        return score.sum()
-
-    @staticmethod
     @torch.no_grad()
-    def evaluate(model, loader, criterion, device):
-        model.eval()
+    def evaluate(self, loader, classes=None, label_info=None, topk: int = 5, log_sample_topk: bool = False, split_name: str = "eval"):
+        self.model.eval()
+        total_loss, total_top1, total_topk, total_superclass_match, total_coarse_top1, n = 0.0, 0.0, 0.0, 0.0, 0.0, 0
+        has_superclass_metric = False
+        has_coarse_top1 = False
+        logged_sample = False
 
-        class_to_super = Evaluator.get_cifar100_superclass_mapping()
+        fine_to_coarse = (label_info or {}).get("fine_to_coarse")
+        fine_classes = (label_info or {}).get("fine_classes")
+        label_level = (label_info or {}).get("label_level")
+        fine_to_coarse_tensor = None
+        if fine_to_coarse is not None:
+            fine_to_coarse_tensor = torch.tensor([int(v) for v in fine_to_coarse], device=self.device, dtype=torch.long)
 
-        running_loss = 0.0
-        total = 0
+        for x, y in tqdm(loader, desc='eval'):
+            x, y = x.to(self.device), y.to(self.device)
+            outputs = self.model(x)
+            logits, coarse_logits = self._extract_logits(outputs)
+            loss = self.criterion(logits, y)
 
-        top1 = 0.0
-        super_class = 0.0
+            probs = logits.softmax(dim=1)
+            k = min(int(topk), probs.shape[1])
+            topk_labels = probs.topk(k=k, dim=1).indices
 
-        for inputs, labels in loader:
-            inputs = inputs.to(device)
-            labels = labels.to(device)
+            top1_preds = logits.argmax(dim=1)
+            top1_batch = (top1_preds == y).float().mean().item()
 
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            in_topk = topk_labels.eq(y.unsqueeze(1)).any(dim=1).float().mean().item()
 
-            running_loss += loss.item()
-            total += labels.size(0)
+            superclass_match_batch = None
+            if fine_to_coarse is not None and fine_classes is not None and logits.shape[1] == len(fine_classes):
+                has_superclass_metric = True
+                mapped_pred = torch.tensor(
+                    [[int(fine_to_coarse[idx]) for idx in row.tolist()] for row in topk_labels],
+                    device=y.device,
+                    dtype=torch.long,
+                )
+                if label_level == "fine":
+                    mapped_true = torch.tensor([int(fine_to_coarse[idx]) for idx in y.tolist()], device=y.device, dtype=torch.long)
+                else:
+                    mapped_true = y
 
-            top1 += Evaluator.acc_top1(outputs, labels).item()
+                superclass_match_batch = mapped_pred.eq(mapped_true.unsqueeze(1)).float().mean().item()
 
-            super_class += Evaluator.super_class_accuracy(
-                outputs, labels, class_to_super
-            ).item()
+            coarse_top1_batch = None
+            if coarse_logits is not None and fine_to_coarse_tensor is not None:
+                coarse_targets = fine_to_coarse_tensor[y] if label_level == "fine" else y
+                coarse_preds = coarse_logits.argmax(dim=1)
+                coarse_top1_batch = (coarse_preds == coarse_targets).float().mean().item()
+                has_coarse_top1 = True
 
-        epoch_loss = running_loss / len(loader)
-        top1_acc = top1 / total
-        super_class_acc = super_class / total
+            if log_sample_topk and (not logged_sample):
+                sample_probs, sample_labels = probs[0].topk(k=k, dim=0)
+                names_source = fine_classes if (fine_classes is not None and logits.shape[1] == len(fine_classes)) else classes
+                if names_source is None:
+                    names = [str(idx) for idx in sample_labels.tolist()]
+                else:
+                    names = [names_source[idx] for idx in sample_labels.tolist()]
+                pairs = [f"{name}: {prob:.4f}" for name, prob in zip(names, sample_probs.tolist())]
+                msg = f"[{split_name}] top-{k} probs -> " + ", ".join(pairs)
+                if superclass_match_batch is not None:
+                    msg += f" | superclass_match@{k}: {superclass_match_batch:.3f}"
+                print(msg)
+                logged_sample = True
 
-        return epoch_loss, top1_acc, super_class_acc
+            bsz = x.size(0)
+            total_loss += loss.item() * bsz
+            total_top1 += top1_batch * bsz
+            total_topk += in_topk * bsz
+            if superclass_match_batch is not None:
+                total_superclass_match += superclass_match_batch * bsz
+            if coarse_top1_batch is not None:
+                total_coarse_top1 += coarse_top1_batch * bsz
+            n += bsz
+
+        metrics = {
+            "loss": total_loss / n,
+            "top1": total_top1 / n,
+            "top5": total_topk / n,
+        }
+        if has_superclass_metric:
+            metrics["superclass_match@5"] = total_superclass_match / n
+        if has_coarse_top1:
+            metrics["coarse_top1"] = total_coarse_top1 / n
+        return metrics
