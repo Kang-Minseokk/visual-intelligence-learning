@@ -17,20 +17,6 @@ from src.engine.evaluator import Evaluator
 from src.utils.seed import set_seed
 
 
-class _FineLogitsEvalModel(torch.nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
-    def forward(self, x):
-        outputs = self.model(x)
-        if isinstance(outputs, dict):
-            if "fine_logits" not in outputs:
-                raise ValueError("Model output dict must include 'fine_logits' for evaluation.")
-            return outputs["fine_logits"]
-        return outputs
-
-
 def _log_epoch_metrics(
     writer,
     epoch,
@@ -47,16 +33,14 @@ def _log_epoch_metrics(
 ):
     writer.add_scalar("Train/Loss", float(train_loss), epoch)
     writer.add_scalar("Train/Top1", float(train_top1), epoch)
-    if train_top5 is not None:
-        writer.add_scalar("Train/Top5", float(train_top5), epoch)
+    writer.add_scalar("Train/Top5", float(train_top5), epoch)
     if train_superclass is not None:
         writer.add_scalar("Train/SuperclassMatchAt5", float(train_superclass), epoch)
     if train_coarse_top1 is not None:
         writer.add_scalar("Train/CoarseTop1", float(train_coarse_top1), epoch)
     writer.add_scalar("Valid/Loss", float(valid_loss), epoch)
     writer.add_scalar("Valid/Top1", float(valid_top1), epoch)
-    if valid_top5 is not None:
-        writer.add_scalar("Valid/Top5", float(valid_top5), epoch)
+    writer.add_scalar("Valid/Top5", float(valid_top5), epoch)
     if valid_superclass is not None:
         writer.add_scalar("Valid/SuperclassMatchAt5", float(valid_superclass), epoch)
     if valid_coarse_top1 is not None:
@@ -88,8 +72,7 @@ def main():
     model_name = cfg['model'].get('name', 'base')
     model = build_model(cfg, device, model_name, input_dim)     
     trainer = build_trainer(model, device, out_dir, cfg, label_info=label_info)
-    eval_model = _FineLogitsEvalModel(model)
-    evaluator = Evaluator(model=eval_model, device=device)
+    evaluator = Evaluator(model=model, device=device)
 
     writer = build_writer(cfg)
     _log_model_graph(writer, model, cfg, device, input_dim)
@@ -114,30 +97,40 @@ def main():
 
         print(f"[Epoch {epoch:3d}] Time: {end - start:.2f}s | Avg Step Time: {avg_step_time:.4f}s | Peak Mem: {peak_mem_gb:.2f} GB | Throughput: {throughput:.2f} samples/s")
         
-        train_loss, train_top1, train_super = evaluator.evaluate(
-            eval_model,
+        train_metrics = evaluator.evaluate(
             train_loader,
-            evaluator.criterion,
-            device,
+            classes=classes,
+            label_info=label_info,
+            topk=5,
+            log_sample_topk=True,
+            split_name="train",
         )
-        valid_loss, valid_top1, valid_super = evaluator.evaluate(
-            eval_model,
+        valid_metrics = evaluator.evaluate(
             valid_loader,
-            evaluator.criterion,
-            device,
+            classes=classes,
+            label_info=label_info,
+            topk=5,
+            log_sample_topk=True,
+            split_name="valid",
         )
 
-        train_top5 = None
-        train_coarse_top1 = None
-        valid_top5 = None
-        valid_coarse_top1 = None
+        train_loss = train_metrics["loss"]
+        train_top1 = train_metrics["top1"]
+        train_top5 = train_metrics["top5"]
+        train_super = train_metrics.get("superclass_match@5")
+        train_coarse_top1 = train_metrics.get("coarse_top1")
+        valid_loss = valid_metrics["loss"]
+        valid_top1 = valid_metrics["top1"]
+        valid_top5 = valid_metrics["top5"]
+        valid_super = valid_metrics.get("superclass_match@5")
+        valid_coarse_top1 = valid_metrics.get("coarse_top1")
 
-        train_line = f"train_loss: {train_loss:.4f} | train_top1: {train_top1:.4f}"
+        train_line = f"train_loss: {train_loss:.4f} | train_top1: {train_top1:.4f} | train_top5: {train_top5:.4f}"
         if train_super is not None:
             train_line += f" | train_superclass_match@5: {train_super:.4f}"
         if train_coarse_top1 is not None:
             train_line += f" | train_coarse_top1: {train_coarse_top1:.4f}"
-        valid_line = f"valid_loss: {valid_loss:.4f} | valid_top1: {valid_top1:.4f}"
+        valid_line = f"valid_loss: {valid_loss:.4f} | valid_top1: {valid_top1:.4f} | valid_top5: {valid_top5:.4f}"
         if valid_super is not None:
             valid_line += f" | valid_superclass_match@5: {valid_super:.4f}"
         if valid_coarse_top1 is not None:
@@ -164,18 +157,23 @@ def main():
     writer.flush()
     writer.close()
     
-    test_loss, test_top1, test_super = evaluator.evaluate(
-        eval_model,
+    test_metrics = evaluator.evaluate(
         test_loader,
-        evaluator.criterion,
-        device,
+        classes=classes,
+        label_info=label_info,
+        topk=5,
+        log_sample_topk=True,
+        split_name="test",
     )
     test_line = (
-        f"test_loss: {test_loss:.4f} | "
-        f"test_top1: {test_top1:.4f}"
+        f"test_loss: {test_metrics['loss']:.4f} | "
+        f"test_top1: {test_metrics['top1']:.4f} | "
+        f"test_top5: {test_metrics['top5']:.4f}"
     )
-    if test_super is not None:
-        test_line += f" | test_superclass_match@5: {test_super:.4f}"
+    if "superclass_match@5" in test_metrics:
+        test_line += f" | test_superclass_match@5: {test_metrics['superclass_match@5']:.4f}"
+    if "coarse_top1" in test_metrics:
+        test_line += f" | test_coarse_top1: {test_metrics['coarse_top1']:.4f}"
     print(test_line)
 
 
