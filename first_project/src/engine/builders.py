@@ -7,6 +7,7 @@ from src.models.net.densenet import DenseNet
 from src.models.net.pyramidnet import PyramidNet
 from src.models.net.wideresnet import WideResNet
 from src.models.net.vit import ViT
+from src.models.net.cct import CCT
 from torch.utils.tensorboard import SummaryWriter
 from src.engine.trainer import Trainer
 from src.dataset.get_dataset import get_dataset_loaders
@@ -102,6 +103,29 @@ def build_model(cfg, device, model_name: str, in_features=None):
             mlp_dim = 2048,
             dropout=0.1,
             emb_dropout=0.1,                        
+        )
+    elif model_name == "cct":
+        if len(input_shape) != 3:
+            raise ValueError(f"CCT expects 3D image input (C,H,W), got: {input_shape}")
+
+        model = CCT(
+            in_channels=int(input_shape[0]),
+            image_size=int(input_shape[1]),
+            num_classes=int(cfg['model']['num_classes']),
+            num_coarse_classes=int(cfg['model'].get('num_coarse_classes', 20)),
+            embedding_dim=int(cfg['model'].get('cct_embedding_dim', 256)),
+            transformer_layers=int(cfg['model'].get('cct_transformer_layers', 7)),
+            transformer_heads=int(cfg['model'].get('cct_transformer_heads', 4)),
+            mlp_ratio=float(cfg['model'].get('cct_mlp_ratio', 2.0)),
+            kernel_size=int(cfg['model'].get('cct_kernel_size', 3)),
+            stride=int(cfg['model'].get('cct_stride', 1)),
+            padding=int(cfg['model'].get('cct_padding', 1)),
+            n_conv_layers=int(cfg['model'].get('cct_n_conv_layers', 1)),
+            tokenizer_pooling_kernel_size=int(cfg['model'].get('cct_tokenizer_pooling_kernel_size', 3)),
+            tokenizer_pooling_stride=int(cfg['model'].get('cct_tokenizer_pooling_stride', 2)),
+            tokenizer_pooling_padding=int(cfg['model'].get('cct_tokenizer_pooling_padding', 1)),
+            dropout=float(cfg['model'].get('dropout', 0.0)),
+            emb_dropout=float(cfg['model'].get('emb_dropout', 0.0)),
         )
     else:
         raise ValueError(f"Unknown model name: {model_name}")

@@ -1,11 +1,15 @@
+import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 
 class PyramidBasicBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, drop_rate: float = 0.0):
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 1):
         super().__init__()
+        self.stride = stride
+        self.pad_channels = out_channels - in_channels
+
         self.bn1 = nn.BatchNorm2d(in_channels)
-        self.relu1 = nn.ReLU(inplace=True)
         self.conv1 = nn.Conv2d(
             in_channels,
             out_channels,
@@ -16,7 +20,6 @@ class PyramidBasicBlock(nn.Module):
         )
 
         self.bn2 = nn.BatchNorm2d(out_channels)
-        self.relu2 = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(
             out_channels,
             out_channels,
@@ -26,21 +29,24 @@ class PyramidBasicBlock(nn.Module):
             bias=False,
         )
 
-        self.dropout = nn.Dropout(p=drop_rate) if drop_rate > 0 else nn.Identity()
+        self.bn3 = nn.BatchNorm2d(out_channels)
 
-        if stride != 1 or in_channels != out_channels:
-            self.shortcut = nn.Conv2d(
-                in_channels,
-                out_channels,
-                kernel_size=1,
-                stride=stride,
-                bias=False,
-            )
-        else:
-            self.shortcut = nn.Identity()
+        # shortcut에는 학습 파라미터 없음 (zero-padding 방식)
+        self.shortcut_bn = nn.BatchNorm2d(out_channels)
+
+    def _shortcut(self, x: Tensor) -> Tensor:
+        # stride=2이면 average pooling으로 spatial 축소
+        if self.stride != 1:
+            x = F.avg_pool2d(x, 2, 2)
+
+        # 채널 부족분을 0으로 패딩
+        if self.pad_channels > 0:
+            x = F.pad(x, (0, 0, 0, 0, 0, self.pad_channels))
+
+        return self.shortcut_bn(x)
 
     def forward(self, x: Tensor) -> Tensor:
-        out = self.conv1(self.relu1(self.bn1(x)))
-        out = self.dropout(out)
-        out = self.conv2(self.relu2(self.bn2(out)))
-        return out + self.shortcut(x)
+        out = self.conv1(F.relu(self.bn1(x)))
+        out = self.conv2(F.relu(self.bn2(out)))
+        out = self.bn3(out)
+        return out + self._shortcut(x)
