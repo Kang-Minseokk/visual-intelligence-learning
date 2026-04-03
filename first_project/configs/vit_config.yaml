@@ -8,16 +8,24 @@ data:
   num_workers: 4
   batch_size: 128
   k_train: -1
-  randaugment_enable: true
+  randaugment_enable: false
   randaugment_num_ops: 2
   randaugment_magnitude: 9
 model:
-  name: "wideresnet"
+  name: "vit"
   hidden_features: 1024
   dropout: 0.1
+  emb_dropout: 0.1
   num_classes: 100
   num_coarse_classes: 20
   depth: 2
+  image_size: 32
+  patch_size: 4
+  in_channels: 3
+  vit_dim: 768
+  vit_depth: 12
+  vit_heads: 12
+  vit_mlp_dim: 3072
   wrn_depth: 28 # WRN 전용
   widen_factor: 10 # WRN 전용
 train:
@@ -34,5 +42,5 @@ train:
   warmup_epochs: 5
   min_lr: 1e-5
   label_smoothing: 0.0
-  mixup_alpha: 0.2 # 이거 위험해요!
+  mixup_alpha: 0.0 # 이거 위험해요!
   lambda_coarse: 0.5
