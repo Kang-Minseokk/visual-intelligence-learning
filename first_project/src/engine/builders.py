@@ -6,7 +6,6 @@ from src.models.net.base import BaseNet
 from src.models.net.densenet import DenseNet
 from src.models.net.pyramidnet import PyramidNet
 from src.models.net.wideresnet import WideResNet
-from src.models.net.vit import ViT
 from torch.utils.tensorboard import SummaryWriter
 from src.engine.trainer import Trainer
 from src.dataset.get_dataset import get_dataset_loaders
