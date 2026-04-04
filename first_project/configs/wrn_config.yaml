@@ -8,7 +8,7 @@ data:
   num_workers: 4
   batch_size: 128
   k_train: -1
-  randaugment_enable: false
+  randaugment_enable: true
   randaugment_num_ops: 2
   randaugment_magnitude: 9
 model:
@@ -34,5 +34,6 @@ train:
   warmup_epochs: 5
   min_lr: 1e-5
   label_smoothing: 0.0
-  mixup_alpha: 0.2 # 이거 위험해요!
+  mixup_alpha: 0.2
   lambda_coarse: 0.5
+  superclass_smooth_alpha: 0.1
