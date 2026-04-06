@@ -35,6 +35,6 @@ train:
   min_lr: 1e-5
   label_smoothing: 0.0
   mixup_alpha: 0.2
-  lambda_coarse: 0.5
+  lambda_coarse: 0.0
   superclass_smooth_alpha: 0.1
  
