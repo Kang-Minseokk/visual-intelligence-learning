@@ -36,7 +36,7 @@ train:
   warmup_epochs: 5
   min_lr: 1e-5
   label_smoothing: 0.0
-  mixup_alpha: 0.2 # 이거 위험해요!
-  lambda_coarse: 0.5
-  mu_align: 0.5
-  align_eps: 1e-8
+  mixup_alpha: 0.2
+  lambda_coarse: 0.0
+  superclass_smooth_alpha: 0.1
+ 

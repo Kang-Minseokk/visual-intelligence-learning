@@ -4,6 +4,7 @@ from pathlib import Path
 from torch import nn
 import torch.nn.functional as F
 import torch
+import torch.nn.functional as F
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
@@ -15,7 +16,9 @@ class Trainer:
         self.config = config or {}
         self.label_info = label_info or {}
         self.fine_to_coarse = self._build_fine_to_coarse_tensor(self.label_info.get("fine_to_coarse"))
-        
+        self.coarse_to_fine = self._build_coarse_to_fine()
+        self.superclass_smooth_alpha = float(self.config.get("superclass_smooth_alpha", 0.0))
+
         optimizer_name = str(self.config.get("optimizer", "sgd")).lower()
         if optimizer_name == "sgd":
             self.optimizer = SGD(
@@ -55,25 +58,50 @@ class Trainer:
             raise ValueError("fine_to_coarse mapping is required for coarse loss.")
         return self.fine_to_coarse[fine_targets]
 
-    def _fine_to_coarse_probs(self, fine_logits):
-        if self.fine_to_coarse is None:
-            raise ValueError("fine_to_coarse mapping is required for align loss.")
+    def _build_coarse_to_fine(self):
+        """fine_to_coarse의 역방향 맵: coarse_idx → List[fine_idx]"""
+        fine_to_coarse_list = self.label_info.get("fine_to_coarse")
+        if fine_to_coarse_list is None:
+            return None
+        num_coarse = max(int(v) for v in fine_to_coarse_list) + 1
+        coarse_to_fine = [[] for _ in range(num_coarse)]
+        for fine_idx, coarse_idx in enumerate(fine_to_coarse_list):
+            coarse_to_fine[int(coarse_idx)].append(fine_idx)
+        return coarse_to_fine
 
-        probs_fine = F.softmax(fine_logits, dim=1)
-        num_coarse = int(self.fine_to_coarse.max().item()) + 1
-        probs_coarse = torch.zeros(
-            fine_logits.size(0),
-            num_coarse,
-            dtype=probs_fine.dtype,
-            device=probs_fine.device,
-        )
-        probs_coarse.scatter_add_(1, self.fine_to_coarse.unsqueeze(0).expand(fine_logits.size(0), -1), probs_fine)
-        return probs_coarse
+    def _superclass_aware_ce(self, fine_logits, fine_targets, alpha: float):
+        """
+        같은 superclass의 sibling classes에만 label smoothing mass를 분배하는 CE loss.
+          - correct class:  1 - alpha
+          - each sibling:   alpha / n_siblings  (보통 alpha / 4)
+          - non-sibling:    0
 
-    def _align_loss(self, fine_logits, coarse_targets):
-        probs_coarse_from_fine = self._fine_to_coarse_probs(fine_logits).clamp_min(self.align_eps)
-        log_probs_coarse = probs_coarse_from_fine.log()
-        return F.nll_loss(log_probs_coarse, coarse_targets)
+        CE loss gradient 효과:
+          ∂loss/∂logit_sibling  = softmax(sibling) - alpha/n_siblings
+            → sibling 확률이 alpha/n_siblings 미만이면 올림, 이상이면 내림
+            → sibling들이 자연스럽게 top-2~5를 차지하도록 유도
+
+        표준 CE와 비교:
+          표준 CE: sibling과 non-sibling을 동일하게 내림
+          이 loss: sibling은 적게 내리거나 올림, non-sibling은 강하게 내림
+        """
+        B, C = fine_logits.shape
+        device = fine_logits.device
+
+        coarse_targets = self.fine_to_coarse[fine_targets]              # [B]
+        # [B, C]: True if fine class j belongs to the same superclass as sample i's target
+        same_sc_mask = (self.fine_to_coarse.unsqueeze(0) == coarse_targets.unsqueeze(1))  # [B, C]
+        correct_mask = F.one_hot(fine_targets, num_classes=C).bool()    # [B, C]
+        sibling_mask = same_sc_mask & ~correct_mask                     # [B, C]
+
+        n_siblings = sibling_mask.float().sum(dim=1, keepdim=True).clamp(min=1.0)  # [B, 1]
+
+        soft_targets = torch.zeros(B, C, device=device)
+        soft_targets[correct_mask] = 1.0 - alpha
+        soft_targets += sibling_mask.float() * (alpha / n_siblings)     # broadcast [B, C]
+
+        log_probs = F.log_softmax(fine_logits, dim=1)
+        return -(soft_targets * log_probs).sum(dim=1).mean()
 
     @staticmethod
     def _extract_logits(outputs):
@@ -140,10 +168,33 @@ class Trainer:
             return x, y, y, 1.0
 
         lam = float(torch.distributions.Beta(self.mixup_alpha, self.mixup_alpha).sample().item())
-        index = torch.randperm(x.size(0), device=x.device)
+
+        if self.fine_to_coarse is not None:
+            # Same-superclass-only mixup:
+            # cross-superclass mixup은 top-5 ranking에 다른 superclass 클래스를
+            # 높은 logit으로 올리도록 직접 학습시키기 때문에 superclass_match@5를 악화시킴.
+            # 같은 superclass 내부끼리만 섞으면 augmentation 효과는 유지하면서
+            # superclass 구조를 보호할 수 있음.
+            coarse_y = self.fine_to_coarse[y]                            # [B]
+            B = x.size(0)
+
+            # [B, B]: True if samples i and j share the same superclass (excluding self)
+            same_sc = (coarse_y.unsqueeze(0) == coarse_y.unsqueeze(1))  # [B, B]
+            same_sc.fill_diagonal_(False)
+
+            # 각 sample에 대해 같은 superclass 내에서 random pair 선택
+            rand_vals = torch.rand(B, B, device=x.device)
+            rand_vals[~same_sc] = -1.0                                   # 다른 superclass는 선택 불가
+            index = rand_vals.argmax(dim=1)                              # [B]
+
+            # 같은 superclass sample이 batch에 없는 경우 self-mix (사실상 no-mix)
+            has_pair = same_sc.any(dim=1)
+            index = torch.where(has_pair, index, torch.arange(B, device=x.device))
+        else:
+            index = torch.randperm(x.size(0), device=x.device)
+
         mixed_x = lam * x + (1.0 - lam) * x[index]
-        y_a, y_b = y, y[index]
-        return mixed_x, y_a, y_b, lam
+        return mixed_x, y, y[index], lam
 
     def train_one_epoch(self, loader, epoch: int, track_flips: bool = False):
         self.model.train()
@@ -159,7 +210,11 @@ class Trainer:
             outputs = self.model(x)
             fine_logits, coarse_logits = self._extract_logits(outputs)
 
-            fine_loss = lam * self.criterion(fine_logits, y_a) + (1.0 - lam) * self.criterion(fine_logits, y_b)
+            if self.superclass_smooth_alpha > 0.0 and self.coarse_to_fine is not None:
+                fine_loss = (lam * self._superclass_aware_ce(fine_logits, y_a, self.superclass_smooth_alpha)
+                             + (1.0 - lam) * self._superclass_aware_ce(fine_logits, y_b, self.superclass_smooth_alpha))
+            else:
+                fine_loss = lam * self.criterion(fine_logits, y_a) + (1.0 - lam) * self.criterion(fine_logits, y_b)
             coarse_loss = None
             align_loss = None
             if coarse_logits is not None and self.lambda_coarse > 0.0:
