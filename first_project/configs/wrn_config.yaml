@@ -20,6 +20,8 @@ model:
   depth: 2
   wrn_depth: 28 # WRN 전용
   widen_factor: 10 # WRN 전용
+  coarse_hidden_dim: 512
+  coarse_dropout: 0.1
 train:
   epochs: 300
   optimizer: sgd
@@ -36,3 +38,5 @@ train:
   label_smoothing: 0.0
   mixup_alpha: 0.2 # 이거 위험해요!
   lambda_coarse: 0.5
+  mu_align: 0.5
+  align_eps: 1e-8

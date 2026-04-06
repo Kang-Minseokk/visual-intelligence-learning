@@ -6,8 +6,6 @@ from src.models.net.base import BaseNet
 from src.models.net.densenet import DenseNet
 from src.models.net.pyramidnet import PyramidNet
 from src.models.net.wideresnet import WideResNet
-from src.models.net.vit import ViT
-from src.models.net.cct import CCT
 from torch.utils.tensorboard import SummaryWriter
 from src.engine.trainer import Trainer
 from src.dataset.get_dataset import get_dataset_loaders
@@ -65,6 +63,8 @@ def build_model(cfg, device, model_name: str, in_features=None):
             dropout=float(cfg['model'].get('dropout', 0.0)),
             num_classes=int(cfg['model']['num_classes']),
             num_coarse_classes=int(cfg['model'].get('num_coarse_classes', 20)),
+            coarse_hidden_dim=int(cfg['model'].get('coarse_hidden_dim', 512)),
+            coarse_dropout=float(cfg['model'].get('coarse_dropout', 0.1)),
         )
     elif model_name == "densenet":
         if len(input_shape) != 3:
@@ -93,6 +93,8 @@ def build_model(cfg, device, model_name: str, in_features=None):
             dropout=float(cfg['model'].get('dropout', 0.0)),
         )
     elif model_name == "vit":
+        from src.models.net.vit import ViT
+
         model = ViT(
             image_size=32,
             patch_size=16, 
@@ -105,6 +107,8 @@ def build_model(cfg, device, model_name: str, in_features=None):
             emb_dropout=0.1,                        
         )
     elif model_name == "cct":
+        from src.models.net.cct import CCT
+
         if len(input_shape) != 3:
             raise ValueError(f"CCT expects 3D image input (C,H,W), got: {input_shape}")
 

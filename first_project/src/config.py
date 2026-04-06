@@ -8,7 +8,7 @@ def load_config():
     parser.add_argument('--output', type=str, required=True, help='Output directory for results and tensorboard logs') 
     args = parser.parse_args()
 
-    cfg = yaml.safe_load(Path(args.config).read_text())
+    cfg = yaml.safe_load(Path(args.config).read_text(encoding='utf-8'))
     cfg['output_dir'] = args.output
     
     return cfg

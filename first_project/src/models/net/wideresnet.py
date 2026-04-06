@@ -13,6 +13,8 @@ class WideResNet(ModelUtilMixin):
         dropout: float = 0.0,
         num_classes: int = 10,
         num_coarse_classes: int = 20,
+        coarse_hidden_dim: int = 512,
+        coarse_dropout: float = 0.1,
     ):
         super().__init__()
 
@@ -38,13 +40,6 @@ class WideResNet(ModelUtilMixin):
             nn.ReLU(inplace=True),
         )
 
-        self.pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.classifier = nn.Sequential(
-            self.pool,
-            nn.Flatten(),
-            nn.Linear(widths[3], num_classes),
-        )
-
         self.fine_head = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
@@ -53,7 +48,10 @@ class WideResNet(ModelUtilMixin):
         self.coarse_head = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(widths[3], int(num_coarse_classes)),
+            nn.Linear(widths[3], int(coarse_hidden_dim)),
+            nn.ReLU(inplace=True),
+            nn.Dropout(float(coarse_dropout)),
+            nn.Linear(int(coarse_hidden_dim), int(num_coarse_classes)),
         )
 
     @staticmethod
