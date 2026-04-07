@@ -14,14 +14,14 @@ data:
 model:
   name: "wideresnet"
   hidden_features: 1024
-  dropout: 0.0
+  dropout: 0.3
   num_classes: 100
   num_coarse_classes: 20
   depth: 2
   wrn_depth: 28 # WRN 전용
   widen_factor: 10 # WRN 전용
 train:
-  epochs: 300
+  epochs: 500
   optimizer: sgd
   lr: 1e-1
   weight_decay: 5e-4
