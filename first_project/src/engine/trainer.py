@@ -4,9 +4,8 @@ from pathlib import Path
 from torch import nn
 import torch.nn.functional as F
 import torch
-import torch.nn.functional as F
 from torch.optim import Adam, SGD
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, ReduceLROnPlateau, SequentialLR
 
 class Trainer:
     def __init__(self, model, device, lr: float, weight_decay: float, log_interval: int, out_dir: str, config=None, label_info=None):
@@ -69,6 +68,27 @@ class Trainer:
             coarse_to_fine[int(coarse_idx)].append(fine_idx)
         return coarse_to_fine
 
+    def _fine_to_coarse_probs(self, fine_logits):
+        if self.fine_to_coarse is None:
+            raise ValueError("fine_to_coarse mapping is required for align loss.")
+
+        probs_fine = F.softmax(fine_logits, dim=1)
+        num_coarse = int(self.fine_to_coarse.max().item()) + 1
+        probs_coarse = torch.zeros(
+            fine_logits.size(0),
+            num_coarse,
+            dtype=probs_fine.dtype,
+            device=probs_fine.device,
+        )
+        # Sum fine probabilities that belong to the same coarse class.
+        probs_coarse.scatter_add_(1, self.fine_to_coarse.unsqueeze(0).expand(fine_logits.size(0), -1), probs_fine)
+        return probs_coarse
+
+    def _align_loss(self, fine_logits, coarse_targets):
+        probs_coarse_from_fine = self._fine_to_coarse_probs(fine_logits).clamp_min(self.align_eps)
+        log_probs_coarse = probs_coarse_from_fine.log()
+        return F.nll_loss(log_probs_coarse, coarse_targets)
+
     def _superclass_aware_ce(self, fine_logits, fine_targets, alpha: float):
         """
         같은 superclass의 sibling classes에만 label smoothing mass를 분배하는 CE loss.
@@ -117,6 +137,18 @@ class Trainer:
         scheduler_name = str(self.config.get("scheduler", "cosine")).lower()
         if scheduler_name in {"none", "off", ""}:
             return None
+
+        if scheduler_name == "plateau":
+            return ReduceLROnPlateau(
+                self.optimizer,
+                mode=str(self.config.get("plateau_mode", "max")),
+                factor=float(self.config.get("plateau_factor", 0.5)),
+                patience=int(self.config.get("plateau_patience", 10)),
+                threshold=float(self.config.get("plateau_threshold", 1e-4)),
+                cooldown=int(self.config.get("plateau_cooldown", 0)),
+                min_lr=float(self.config.get("min_lr", 0.0)),
+            )
+
         if scheduler_name != "cosine":
             raise ValueError(f"Unsupported scheduler! : {scheduler_name}")
         
@@ -159,9 +191,14 @@ class Trainer:
             eta_min=min_lr,
         )
 
-    def step_scheduler(self):
+    def step_scheduler(self, metric=None):
         if self.scheduler is not None:
-            self.scheduler.step()
+            if isinstance(self.scheduler, ReduceLROnPlateau):
+                if metric is None:
+                    raise ValueError("ReduceLROnPlateau requires a metric for scheduler.step(metric).")
+                self.scheduler.step(float(metric))
+            else:
+                self.scheduler.step()
 
     def _apply_mixup(self, x, y):
         if self.mixup_alpha <= 0.0:

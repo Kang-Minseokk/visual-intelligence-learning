@@ -85,7 +85,6 @@ def main():
         start = time.time()
 
         trainer.train_one_epoch(train_loader, epoch)
-        trainer.step_scheduler()
         
         torch.cuda.synchronize()
         end = time.time()
@@ -151,7 +150,10 @@ def main():
             valid_top5,
             valid_super,
             valid_coarse_top1,
-        )            
+        )
+
+        monitor_metric = valid_super if valid_super is not None else valid_top1
+        trainer.step_scheduler(metric=monitor_metric)
  
     # === TB: 종료 ===
     writer.flush()

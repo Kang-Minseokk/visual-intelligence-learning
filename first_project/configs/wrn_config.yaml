@@ -33,10 +33,18 @@ train:
   momentum : 0.9
   nesterov: true
   scheduler: cosine
+  # scheduler: plateau
   warmup_epochs: 5
   min_lr: 1e-5
+  plateau_mode: max
+  plateau_factor: 0.5
+  plateau_patience: 10
+  plateau_threshold: 1e-4
+  plateau_cooldown: 0
   label_smoothing: 0.0
   mixup_alpha: 0.2
-  lambda_coarse: 0.0
+  lambda_coarse: 0.5
+  mu_align: 0.3
+  align_eps: 1e-8
   superclass_smooth_alpha: 0.1
  
