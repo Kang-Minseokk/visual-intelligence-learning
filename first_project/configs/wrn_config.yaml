@@ -10,11 +10,11 @@ data:
   k_train: -1
   randaugment_enable: true
   randaugment_num_ops: 2
-  randaugment_magnitude: 9
+  randaugment_magnitude: 12
 model:
   name: "wideresnet"
   hidden_features: 1024
-  dropout: 0.1
+  dropout: 0.2
   num_classes: 100
   num_coarse_classes: 20
   depth: 2
@@ -26,7 +26,7 @@ train:
   epochs: 300
   optimizer: sgd
   lr: 1e-1
-  weight_decay: 5e-4
+  weight_decay: 1e-3
   device: cuda
   log_interval: 235
   ckpt_interval: 1
@@ -41,10 +41,10 @@ train:
   plateau_patience: 10
   plateau_threshold: 1e-4
   plateau_cooldown: 0
-  label_smoothing: 0.0
-  mixup_alpha: 0.2
-  lambda_coarse: 0.5
-  mu_align: 0.3
+  label_smoothing: 0.1
+  mixup_alpha: 0.4
+  lambda_coarse: 0.0
+  mu_align: 0.0
   align_eps: 1e-8
-  superclass_smooth_alpha: 0.1
+  superclass_smooth_alpha: 0.0
  
