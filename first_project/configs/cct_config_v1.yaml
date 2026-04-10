@@ -1,0 +1,59 @@
+# ============================================================
+# 실험 1: CCT-14/256  (우선순위 1)
+# ============================================================
+# CCT 원본 논문의 best 구성(depth=14, embed=256, heads=4)에
+# WRN 실험에서 검증된 기법을 모두 적용한 버전.
+#
+# WRN에서 검증된 적용 사항:
+#   - superclass_aware_ce (alpha=0.1): fine top-5 superclass 정렬
+#   - same-superclass mixup:           superclass 신호 방해 제거
+#   - lambda_coarse=0.0:               coarse_head loss 불필요 확인됨
+#   - RandAugment:                     top1 generalization
+#
+# Transformer 전용 설정:
+#   - AdamW (weight_decay=0.05, bias/norm 제외):  transformer 표준
+#   - warmup 10 epochs:                            초기 학습 안정화
+#   - lr=5e-4:                                     ViT 계열 표준 LR
+# ============================================================
+
+seed: 42
+output_dir: logs
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 128
+  k_train: -1
+  randaugment_enable: true
+  randaugment_num_ops: 2
+  randaugment_magnitude: 9
+model:
+  name: cct
+  embed_dim: 256
+  depth: 14
+  n_heads: 4
+  mlp_ratio: 2.0
+  dropout: 0.1
+  attn_dropout: 0.0
+  n_conv_layers: 2
+  num_classes: 100
+  num_coarse_classes: 20
+train:
+  epochs: 300
+  optimizer: adamw
+  lr: 5e-4
+  weight_decay: 0.05
+  momentum: 0.9        # adamw 미사용 (sgd fallback 대비 유지)
+  nesterov: false
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  scheduler: cosine
+  warmup_epochs: 10
+  min_lr: 1e-5
+  label_smoothing: 0.0
+  mixup_alpha: 0.2
+  lambda_coarse: 0.0
+  superclass_smooth_alpha: 0.1

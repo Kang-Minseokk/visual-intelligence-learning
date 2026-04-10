@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 
 from src.models.net.base import BaseNet
+from src.models.net.cct import CCT
 from src.models.net.densenet import DenseNet
 from src.models.net.pyramidnet import PyramidNet
 from src.models.net.wideresnet import WideResNet
@@ -90,17 +91,20 @@ def build_model(cfg, device, model_name: str, in_features=None):
             alpha=int(cfg['model'].get('pyramid_alpha', 48)),
             dropout=float(cfg['model'].get('dropout', 0.0)),
         )
-    elif model_name == "vit":
-        model = ViT(
-            image_size=32,
-            patch_size=16, 
+    elif model_name == "cct":
+        if len(input_shape) != 3:
+            raise ValueError(f"CCT expects 3D image input (C,H,W), got: {input_shape}")
+        model = CCT(
+            in_channels=int(input_shape[0]),
+            embed_dim=int(cfg['model'].get('embed_dim', 256)),
+            depth=int(cfg['model'].get('depth', 14)),
+            n_heads=int(cfg['model'].get('n_heads', 4)),
+            mlp_ratio=float(cfg['model'].get('mlp_ratio', 2.0)),
+            dropout=float(cfg['model'].get('dropout', 0.1)),
+            attn_dropout=float(cfg['model'].get('attn_dropout', 0.0)),
+            n_conv_layers=int(cfg['model'].get('n_conv_layers', 2)),
             num_classes=int(cfg['model']['num_classes']),
-            dim=1024,
-            depth=6,
-            heads=16,
-            mlp_dim = 2048,
-            dropout=0.1,
-            emb_dropout=0.1,                        
+            num_coarse_classes=int(cfg['model'].get('num_coarse_classes', 20)),
         )
     else:
         raise ValueError(f"Unknown model name: {model_name}")

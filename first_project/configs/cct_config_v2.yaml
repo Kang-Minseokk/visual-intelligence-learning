@@ -1,0 +1,61 @@
+# ============================================================
+# 실험 2: CCT-14/384  (우선순위 2)
+# ============================================================
+# 실험 1과 동일한 설정에서 모델 용량만 확장한 버전.
+#   embed_dim: 256 → 384  (+50%)
+#   n_heads:     4 → 6
+#   mlp_ratio: 2.0 → 3.0
+#
+# 용량 확장의 효과:
+#   - attention head당 dim: 256/4=64 → 384/6=64 (동일, 안정적)
+#   - MLP hidden: 256*2=512 → 384*3=1152 (표현력 2.2배)
+#   - 전체 파라미터: ~15M → ~35M
+#
+# lr을 5e-4 → 3e-4로 낮춘 이유:
+#   - 모델이 클수록 초기 gradient norm이 커서 발산 위험
+#   - WRN에서도 용량 증가 시 lr 하향이 안정적
+#
+# 메모리 주의: batch_size=128이 OOM이면 64로 낮출 것
+# ============================================================
+
+seed: 42
+output_dir: logs
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 128
+  k_train: -1
+  randaugment_enable: true
+  randaugment_num_ops: 2
+  randaugment_magnitude: 9
+model:
+  name: cct
+  embed_dim: 384
+  depth: 14
+  n_heads: 6
+  mlp_ratio: 3.0
+  dropout: 0.1
+  attn_dropout: 0.0
+  n_conv_layers: 2
+  num_classes: 100
+  num_coarse_classes: 20
+train:
+  epochs: 300
+  optimizer: adamw
+  lr: 3e-4
+  weight_decay: 0.05
+  momentum: 0.9
+  nesterov: false
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  scheduler: cosine
+  warmup_epochs: 10
+  min_lr: 1e-5
+  label_smoothing: 0.0
+  mixup_alpha: 0.2
+  lambda_coarse: 0.0
+  superclass_smooth_alpha: 0.1

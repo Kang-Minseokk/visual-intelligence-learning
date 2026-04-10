@@ -4,7 +4,7 @@ from pathlib import Path
 from torch import nn
 import torch
 import torch.nn.functional as F
-from torch.optim import Adam, SGD
+from torch.optim import Adam, AdamW, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 class Trainer:
@@ -29,7 +29,25 @@ class Trainer:
             )
         elif optimizer_name == "adam":
             self.optimizer = Adam(model.parameters(), lr=float(lr), weight_decay=float(weight_decay))
-        else :
+        elif optimizer_name == "adamw":
+            # Transformer 전용: bias, LayerNorm, 1-d 파라미터에는 weight decay 미적용.
+            # weight decay를 이런 파라미터에 적용하면 학습이 불안정해지고 성능이 하락함.
+            decay, no_decay = [], []
+            for name, param in model.named_parameters():
+                if not param.requires_grad:
+                    continue
+                if param.ndim <= 1 or name.endswith(".bias") or "norm" in name.lower():
+                    no_decay.append(param)
+                else:
+                    decay.append(param)
+            self.optimizer = AdamW(
+                [
+                    {"params": decay,    "weight_decay": float(weight_decay)},
+                    {"params": no_decay, "weight_decay": 0.0},
+                ],
+                lr=float(lr),
+            )
+        else:
             raise ValueError(f"Unsupported Optimizer! : {optimizer_name}")
         
         label_smoothing = float(self.config.get("label_smoothing", 0.0))
