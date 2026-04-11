@@ -102,6 +102,7 @@ def build_model(cfg, device, model_name: str, in_features=None):
             mlp_ratio=float(cfg['model'].get('mlp_ratio', 2.0)),
             dropout=float(cfg['model'].get('dropout', 0.1)),
             attn_dropout=float(cfg['model'].get('attn_dropout', 0.0)),
+            stochastic_depth_rate=float(cfg['model'].get('stochastic_depth_rate', 0.1)),
             n_conv_layers=int(cfg['model'].get('n_conv_layers', 2)),
             num_classes=int(cfg['model']['num_classes']),
             num_coarse_classes=int(cfg['model'].get('num_coarse_classes', 20)),

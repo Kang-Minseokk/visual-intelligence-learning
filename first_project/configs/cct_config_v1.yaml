@@ -1,5 +1,5 @@
 # ============================================================
-# 실험 1: CCT-14/256  (우선순위 1)
+# 실험 1: CCT-14/256  (초기 실험 - stochastic depth 없음)
 # ============================================================
 # CCT 원본 논문의 best 구성(depth=14, embed=256, heads=4)에
 # WRN 실험에서 검증된 기법을 모두 적용한 버전.
@@ -14,6 +14,10 @@
 #   - AdamW (weight_decay=0.05, bias/norm 제외):  transformer 표준
 #   - warmup 10 epochs:                            초기 학습 안정화
 #   - lr=5e-4:                                     ViT 계열 표준 LR
+#
+# 결과: valid_top1=65.9%, train-valid gap=33.3%
+#   → transformer 귀납적 편향 부재로 심각한 과적합 확인
+#   → stochastic depth 없이는 CNN 수준 정규화로 부족함 확인
 # ============================================================
 
 seed: 42
@@ -37,6 +41,7 @@ model:
   mlp_ratio: 2.0
   dropout: 0.1
   attn_dropout: 0.0
+  stochastic_depth_rate: 0.0
   n_conv_layers: 2
   num_classes: 100
   num_coarse_classes: 20
@@ -45,7 +50,7 @@ train:
   optimizer: adamw
   lr: 5e-4
   weight_decay: 0.05
-  momentum: 0.9        # adamw 미사용 (sgd fallback 대비 유지)
+  momentum: 0.9
   nesterov: false
   device: cuda
   log_interval: 235

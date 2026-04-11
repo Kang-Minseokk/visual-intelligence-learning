@@ -1,0 +1,61 @@
+# ============================================================
+# 실험 4: CCT-14/256 + Stochastic Depth 0.2 (우선순위 2)
+# ============================================================
+# v3과 모델 구조는 동일하고 정규화 강도만 높인 버전.
+#
+# v3 대비 변경 사항:
+#   stochastic_depth_rate: 0.1 → 0.2
+#     layer 13의 drop_prob: 10% → 20%
+#     더 깊은 layer에서 더 자주 block 전체를 skip
+#   dropout: 0.2 → 0.3
+#
+# 이 실험으로 얻을 수 있는 정보:
+#   stochastic depth를 더 강하게 적용했을 때 generalization이 얼마나 더 개선되는가
+#   → v3 대비 train top1이 낮아지더라도 valid가 올라가면 정규화 방향이 올바름
+#   → v3와 v4 비교로 최적 stochastic_depth_rate 범위를 파악
+#
+# 모델 구조: v3과 동일 (embed=256, depth=14, heads=4)
+# ============================================================
+
+seed: 42
+output_dir: logs
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 128
+  k_train: -1
+  randaugment_enable: true
+  randaugment_num_ops: 2
+  randaugment_magnitude: 9
+model:
+  name: cct
+  embed_dim: 256
+  depth: 14
+  n_heads: 4
+  mlp_ratio: 2.0
+  dropout: 0.3
+  attn_dropout: 0.0
+  stochastic_depth_rate: 0.2
+  n_conv_layers: 2
+  num_classes: 100
+  num_coarse_classes: 20
+train:
+  epochs: 300
+  optimizer: adamw
+  lr: 5e-4
+  weight_decay: 0.1
+  momentum: 0.9
+  nesterov: false
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  scheduler: cosine
+  warmup_epochs: 10
+  min_lr: 1e-5
+  label_smoothing: 0.0
+  mixup_alpha: 0.4
+  lambda_coarse: 0.0
+  superclass_smooth_alpha: 0.1
