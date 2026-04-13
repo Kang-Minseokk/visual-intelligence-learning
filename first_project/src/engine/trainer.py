@@ -17,6 +17,11 @@ class Trainer:
         self.fine_to_coarse = self._build_fine_to_coarse_tensor(self.label_info.get("fine_to_coarse"))
         self.coarse_to_fine = self._build_coarse_to_fine()
         self.superclass_smooth_alpha = float(self.config.get("superclass_smooth_alpha", 0.0))
+        self.lambda_coarse_from_fine = float(self.config.get("lambda_coarse_from_fine", 0.0))
+        self.cutmix_alpha = float(self.config.get("cutmix_alpha", 0.0))
+        self.aug_mode = str(self.config.get("aug_mode", "mixup")).lower()
+        # Pre-build per-superclass fine-index tensors for coarse_from_fine loss (efficiency)
+        self._coarse_fine_indices = self._build_coarse_fine_indices()
 
         optimizer_name = str(self.config.get("optimizer", "sgd")).lower()
         if optimizer_name == "sgd":
@@ -84,6 +89,15 @@ class Trainer:
             coarse_to_fine[int(coarse_idx)].append(fine_idx)
         return coarse_to_fine
 
+    def _build_coarse_fine_indices(self):
+        """Pre-build device tensors of fine indices per superclass for vectorized logsumexp."""
+        if self.coarse_to_fine is None:
+            return None
+        return [
+            torch.tensor(indices, dtype=torch.long, device=self.device)
+            for indices in self.coarse_to_fine
+        ]
+
     def _superclass_aware_ce(self, fine_logits, fine_targets, alpha: float):
         """
         같은 superclass의 sibling classes에만 label smoothing mass를 분배하는 CE loss.
@@ -117,6 +131,60 @@ class Trainer:
 
         log_probs = F.log_softmax(fine_logits, dim=1)
         return -(soft_targets * log_probs).sum(dim=1).mean()
+
+    def _coarse_from_fine_loss(self, fine_logits, fine_targets):
+        """
+        Hierarchical coarse loss derived purely from fine logits — no separate head needed.
+
+        Computes coarse logits via logsumexp grouping:
+            coarse_logit[c] = logsumexp(fine_logits[fine_indices_of_c])
+
+        This is equivalent to log P(superclass=c | x) up to a constant, so CE on
+        these values directly minimises -log P(correct_superclass | x).
+
+        Gradient effect on fine_logits:
+            - logits inside correct superclass:   softmax(coarse)[correct_c] - 1  → pushed UP
+            - logits inside wrong superclass j:   softmax(coarse)[j]              → pushed DOWN
+        Combined with fine CE, the model must simultaneously get the right fine class
+        AND concentrate probability mass in the right superclass group.
+        """
+        if self._coarse_fine_indices is None or self.fine_to_coarse is None:
+            return None
+        coarse_logits = torch.stack(
+            [torch.logsumexp(fine_logits[:, idx], dim=1) for idx in self._coarse_fine_indices],
+            dim=1,
+        )  # [B, num_coarse]
+        coarse_targets = self.fine_to_coarse[fine_targets]
+        return F.cross_entropy(coarse_logits, coarse_targets)
+
+    def _apply_cutmix(self, x, y):
+        """
+        CutMix augmentation (Yun et al. 2019).
+        Cuts a random rectangular patch from one image into another.
+        Complements Mixup: Mixup blends globally, CutMix preserves local structure.
+        """
+        if self.cutmix_alpha <= 0.0:
+            return x, y, y, 1.0
+        lam = float(torch.distributions.Beta(self.cutmix_alpha, self.cutmix_alpha).sample().item())
+        B, _, H, W = x.shape
+        index = torch.randperm(B, device=x.device)
+
+        cut_ratio = (1.0 - lam) ** 0.5
+        cut_h = int(H * cut_ratio)
+        cut_w = int(W * cut_ratio)
+
+        cx = int(torch.randint(W, (1,)).item())
+        cy = int(torch.randint(H, (1,)).item())
+        x1 = max(0, cx - cut_w // 2)
+        x2 = min(W, cx + cut_w // 2)
+        y1 = max(0, cy - cut_h // 2)
+        y2 = min(H, cy + cut_h // 2)
+
+        mixed_x = x.clone()
+        mixed_x[:, :, y1:y2, x1:x2] = x[index, :, y1:y2, x1:x2]
+        lam = 1.0 - float((x2 - x1) * (y2 - y1)) / float(H * W)
+
+        return mixed_x, y, y[index], lam
 
     @staticmethod
     def _extract_logits(outputs):
@@ -211,16 +279,29 @@ class Trainer:
         mixed_x = lam * x + (1.0 - lam) * x[index]
         return mixed_x, y, y[index], lam
 
+    def _apply_augmentation(self, x, y):
+        """Dispatch to Mixup, CutMix, or randomly one of both based on aug_mode config."""
+        if self.aug_mode == "cutmix":
+            return self._apply_cutmix(x, y)
+        elif self.aug_mode == "both":
+            if torch.rand(1).item() < 0.5:
+                return self._apply_mixup(x, y)
+            else:
+                return self._apply_cutmix(x, y)
+        else:  # default: mixup
+            return self._apply_mixup(x, y)
+
     def train_one_epoch(self, loader, epoch: int, track_flips: bool = False):
         self.model.train()
         running_loss = 0.0
         running_fine_loss = 0.0
         running_coarse_loss = 0.0
+        running_cf_loss = 0.0
         progress_bar = tqdm(loader, desc=f"train epoch {epoch}")
-        for step, (x, y) in enumerate(progress_bar):            
-                        
+        for step, (x, y) in enumerate(progress_bar):
+
             x, y = x.to(self.device), y.to(self.device)
-            x, y_a, y_b, lam = self._apply_mixup(x, y)
+            x, y_a, y_b, lam = self._apply_augmentation(x, y)
             outputs = self.model(x)
             fine_logits, coarse_logits = self._extract_logits(outputs)
 
@@ -229,15 +310,26 @@ class Trainer:
                              + (1.0 - lam) * self._superclass_aware_ce(fine_logits, y_b, self.superclass_smooth_alpha))
             else:
                 fine_loss = lam * self.criterion(fine_logits, y_a) + (1.0 - lam) * self.criterion(fine_logits, y_b)
+
+            loss = fine_loss
+
             coarse_loss = None
             if coarse_logits is not None and self.lambda_coarse > 0.0:
                 coarse_y_a = self._to_coarse_targets(y_a)
                 coarse_y_b = self._to_coarse_targets(y_b)
                 coarse_loss = lam * self.criterion(coarse_logits, coarse_y_a) + (1.0 - lam) * self.criterion(coarse_logits, coarse_y_b)
-                loss = fine_loss + self.lambda_coarse * coarse_loss
-            else:
-                loss = fine_loss
-            
+                loss = loss + self.lambda_coarse * coarse_loss
+
+            # Coarse-from-fine loss: logsumexp-grouped CE over fine logits.
+            # Forces fine probability mass into the correct superclass without a separate head.
+            cf_loss = None
+            if self.lambda_coarse_from_fine > 0.0:
+                cf_loss_a = self._coarse_from_fine_loss(fine_logits, y_a)
+                cf_loss_b = self._coarse_from_fine_loss(fine_logits, y_b)
+                if cf_loss_a is not None and cf_loss_b is not None:
+                    cf_loss = lam * cf_loss_a + (1.0 - lam) * cf_loss_b
+                    loss = loss + self.lambda_coarse_from_fine * cf_loss
+
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -246,6 +338,8 @@ class Trainer:
             running_fine_loss += fine_loss.item()
             if coarse_loss is not None:
                 running_coarse_loss += coarse_loss.item()
+            if cf_loss is not None:
+                running_cf_loss += cf_loss.item()
             if step % self.log_interval == 0:
                 current_lr = self.optimizer.param_groups[0]["lr"]
                 postfix = {
@@ -255,6 +349,8 @@ class Trainer:
                 }
                 if coarse_loss is not None:
                     postfix["Coarse"] = f"{coarse_loss.item():.5f}"
+                if cf_loss is not None:
+                    postfix["CF"] = f"{cf_loss.item():.5f}"
                 progress_bar.set_postfix(postfix)
-        
+
         return running_loss / (step + 1)

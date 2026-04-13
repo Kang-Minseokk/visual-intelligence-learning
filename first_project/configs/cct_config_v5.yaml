@@ -1,0 +1,78 @@
+# ============================================================
+# 실험 5: CCT-14/256 + Coarse-from-Fine Loss + CutMix/Mixup (추천 설정)
+# ============================================================
+# v4 대비 핵심 변경 사항:
+#
+#   [Loss]
+#   lambda_coarse_from_fine: 0.0 → 0.5
+#     logsumexp-grouped coarse CE를 fine logits에서 직접 계산.
+#     fine logit mass를 올바른 superclass로 집중시키는 명시적 계층 목표.
+#     별도 head 없이 fine logits만 사용 (요구사항 준수).
+#
+#   superclass_smooth_alpha: 0.1 → 0.15
+#     sibling class에 할당되는 soft label 비중 증가.
+#     각 sibling target: 0.025 → 0.0375
+#     sibling을 더 적극적으로 끌어올려 superclass 정렬 강화.
+#
+#   [Augmentation]
+#   aug_mode: mixup → both  (Mixup + CutMix 랜덤 선택)
+#   cutmix_alpha: 0.0 → 1.0
+#     CutMix는 Mixup과 상보적: Mixup은 전역 블렌딩, CutMix는 로컬 구조 보존.
+#     CIFAR-100에서 CutMix 단독 또는 both 모드가 Mixup 단독보다 일반적으로 우월.
+#
+#   [Schedule]
+#   epochs: 300 → 400
+#     CCT는 CNN보다 수렴이 느리고, 300 epoch에서 완전히 수렴하지 않을 가능성 존재.
+#
+#   [Regularization]
+#   stochastic_depth_rate: 0.2 → 0.1  (v3 수준으로 복귀)
+#   dropout: 0.3 → 0.2
+#     새 loss term이 representation을 구조화하므로 기존 정규화를 약간 완화.
+#     과도한 정규화(v4)가 오히려 학습 신호를 희석시킬 수 있음.
+# ============================================================
+
+seed: 42
+output_dir: logs
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 128
+  k_train: -1
+  randaugment_enable: true
+  randaugment_num_ops: 2
+  randaugment_magnitude: 9
+model:
+  name: cct
+  embed_dim: 256
+  depth: 14
+  n_heads: 4
+  mlp_ratio: 2.0
+  dropout: 0.2
+  attn_dropout: 0.0
+  stochastic_depth_rate: 0.1
+  n_conv_layers: 2
+  num_classes: 100
+  num_coarse_classes: 20
+train:
+  epochs: 400
+  optimizer: adamw
+  lr: 5e-4
+  weight_decay: 0.1
+  momentum: 0.9
+  nesterov: false
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  scheduler: cosine
+  warmup_epochs: 10
+  min_lr: 1e-5
+  label_smoothing: 0.0
+  mixup_alpha: 0.4
+  cutmix_alpha: 1.0
+  aug_mode: both
+  lambda_coarse: 0.0
+  superclass_smooth_alpha: 0.15
+  lambda_coarse_from_fine: 0.5
