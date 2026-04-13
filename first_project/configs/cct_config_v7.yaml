@@ -1,0 +1,85 @@
+# ============================================================
+# version_3: CCT-14/256 + Sibling Gap Loss (explicit ranking enforcement)
+# ============================================================
+# Purpose: Add an explicit geometric constraint that enforces
+#          min(sibling logits) > max(non-sibling logits) - margin.
+#          This is the only loss in this codebase that directly
+#          encodes the 3-tier ranking requirement on fine logits.
+#
+# How it differs from the other losses:
+#   _superclass_aware_ce:    soft distribution shaping (targets siblings up indirectly)
+#   _coarse_from_fine_loss:  maximises P(correct_superclass) as a group via logsumexp
+#   _sibling_gap_loss [NEW]: hard hinge on individual logit positions:
+#                            for every non-sibling k, penalise if
+#                            logit[k] > min(sibling logits) - margin
+#
+# Gradient mechanics:
+#   - Every violating non-sibling gets a gradient pushing its logit DOWN.
+#   - The sibling with the minimum logit gets a gradient pushing it UP.
+#   - Target class logit is not touched by this loss (only CF and fine CE handle it).
+#   Combined with CF loss this gives:
+#     CF loss:  ensures the GROUP of siblings dominates non-sibling groups
+#     SG loss:  ensures every INDIVIDUAL non-sibling is below every sibling
+#
+# Why lambda=0.05 and margin=0.5:
+#   At random init, all logits ≈ 0, so each non-sibling penalty ≈ relu(0.5+0-0)=0.5.
+#   With 80 non-siblings averaged: raw loss ≈ 0.5, scaled by 0.05 → contributes 0.025
+#   to total loss (fine CE ≈ 4.6 at init). Small enough not to overwhelm fine CE.
+#   As training proceeds, the loss self-extinguishes when the gap is satisfied.
+#
+# Differences from v5 (version_1):
+#   lambda_sibling_gap:  0.0 → 0.05  (new, requires code in trainer.py)
+#   sibling_gap_margin:  —   → 0.5
+#   All other settings: identical to v5
+#
+# Main target metric: superclass accuracy (primary) + fine Top-1 (secondary)
+# Code changes needed: YES — _sibling_gap_loss already added to trainer.py
+# ============================================================
+
+seed: 42
+output_dir: logs
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 128
+  k_train: -1
+  randaugment_enable: true
+  randaugment_num_ops: 2
+  randaugment_magnitude: 9
+model:
+  name: cct
+  embed_dim: 256
+  depth: 14
+  n_heads: 4
+  mlp_ratio: 2.0
+  dropout: 0.2
+  attn_dropout: 0.0
+  stochastic_depth_rate: 0.1
+  n_conv_layers: 2
+  num_classes: 100
+  num_coarse_classes: 20
+train:
+  epochs: 400
+  optimizer: adamw
+  lr: 5e-4
+  weight_decay: 0.1
+  momentum: 0.9
+  nesterov: false
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  scheduler: cosine
+  warmup_epochs: 10
+  min_lr: 1e-5
+  label_smoothing: 0.0
+  mixup_alpha: 0.4
+  cutmix_alpha: 1.0
+  aug_mode: both
+  lambda_coarse: 0.0
+  superclass_smooth_alpha: 0.15
+  lambda_coarse_from_fine: 0.5
+  lambda_sibling_gap: 0.05
+  sibling_gap_margin: 0.5

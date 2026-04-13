@@ -20,6 +20,8 @@ class Trainer:
         self.lambda_coarse_from_fine = float(self.config.get("lambda_coarse_from_fine", 0.0))
         self.cutmix_alpha = float(self.config.get("cutmix_alpha", 0.0))
         self.aug_mode = str(self.config.get("aug_mode", "mixup")).lower()
+        self.lambda_sibling_gap = float(self.config.get("lambda_sibling_gap", 0.0))
+        self.sibling_gap_margin = float(self.config.get("sibling_gap_margin", 0.5))
         # Pre-build per-superclass fine-index tensors for coarse_from_fine loss (efficiency)
         self._coarse_fine_indices = self._build_coarse_fine_indices()
 
@@ -156,6 +158,55 @@ class Trainer:
         )  # [B, num_coarse]
         coarse_targets = self.fine_to_coarse[fine_targets]
         return F.cross_entropy(coarse_logits, coarse_targets)
+
+    def _sibling_gap_loss(self, fine_logits, fine_targets):
+        """
+        Explicit sibling-gap ranking loss.
+
+        Directly enforces the 3-tier logit hierarchy:
+            logit[target] > logit[sibling_i] > logit[non_sibling_j]
+
+        For the second tier (siblings > non-siblings), computes per-sample:
+            mean over non_sibling k: relu(margin + logit[k] - min_sibling_logit)
+
+        This penalises every non-sibling logit that violates
+            min_sibling_logit - logit[non_sibling] >= margin.
+
+        Gradient:
+            - Increases min(sibling logits) for samples with violations.
+            - Decreases each violating non-sibling logit toward
+              (min_sibling_logit - margin).
+
+        _superclass_aware_ce already shapes the distribution softly.
+        This loss adds a hard geometric constraint on top of it.
+
+        Config keys read from self.config:
+            sibling_gap_margin (float, default 0.5)
+        """
+        if self.fine_to_coarse is None:
+            return None
+
+        B, C = fine_logits.shape
+        device = fine_logits.device
+
+        coarse_targets = self.fine_to_coarse[fine_targets]                     # [B]
+        same_sc_mask = (self.fine_to_coarse.unsqueeze(0) == coarse_targets.unsqueeze(1))  # [B, C]
+        correct_mask = F.one_hot(fine_targets, num_classes=C).bool()           # [B, C]
+        sibling_mask = same_sc_mask & ~correct_mask                            # [B, C]
+        non_sibling_mask = ~same_sc_mask                                       # [B, C]
+
+        # Min logit among siblings per sample [B]
+        # Fill non-sibling positions with +inf so they don't affect the min
+        min_sibling = fine_logits.masked_fill(~sibling_mask, float('inf')).min(dim=1).values
+
+        # Hinge: penalise non-sibling logits within `margin` of min sibling logit
+        # [B, C]: relu(margin + logit[k] - min_sibling[b])
+        violation = F.relu(self.sibling_gap_margin + fine_logits - min_sibling.unsqueeze(1))
+        violation = violation * non_sibling_mask.float()
+
+        # Average over non-sibling positions (not all C) so scale stays stable
+        n_non_siblings = non_sibling_mask.float().sum(dim=1).clamp(min=1.0)   # [B]
+        return (violation.sum(dim=1) / n_non_siblings).mean()
 
     def _apply_cutmix(self, x, y):
         """
@@ -330,6 +381,16 @@ class Trainer:
                     cf_loss = lam * cf_loss_a + (1.0 - lam) * cf_loss_b
                     loss = loss + self.lambda_coarse_from_fine * cf_loss
 
+            # Sibling-gap loss: explicit hinge enforcing min(sibling) > non-sibling + margin.
+            # Directly encodes the 3-tier ranking requirement on fine logits.
+            sg_loss = None
+            if self.lambda_sibling_gap > 0.0:
+                sg_loss_a = self._sibling_gap_loss(fine_logits, y_a)
+                sg_loss_b = self._sibling_gap_loss(fine_logits, y_b)
+                if sg_loss_a is not None and sg_loss_b is not None:
+                    sg_loss = lam * sg_loss_a + (1.0 - lam) * sg_loss_b
+                    loss = loss + self.lambda_sibling_gap * sg_loss
+
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -351,6 +412,8 @@ class Trainer:
                     postfix["Coarse"] = f"{coarse_loss.item():.5f}"
                 if cf_loss is not None:
                     postfix["CF"] = f"{cf_loss.item():.5f}"
+                if sg_loss is not None:
+                    postfix["SG"] = f"{sg_loss.item():.5f}"
                 progress_bar.set_postfix(postfix)
 
         return running_loss / (step + 1)

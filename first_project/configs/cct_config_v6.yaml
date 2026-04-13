@@ -1,0 +1,72 @@
+# ============================================================
+# version_2: CCT-14/256 + Aggressive Hierarchy (config-only ablation)
+# ============================================================
+# Purpose: Test whether pushing the hierarchical supervision harder
+#          squeezes more out of the same architecture without extra code.
+#
+# Hypothesis:
+#   v5 uses lambda_coarse_from_fine=0.5 and alpha=0.15 — both conservative.
+#   If the logsumexp coarse loss is the dominant signal (as expected),
+#   doubling its weight and also raising alpha should further concentrate
+#   fine probability mass within the correct superclass, at the cost of
+#   slightly harder fine-class discrimination.
+#   The net effect on fine Top-1 depends on which factor dominates:
+#     - better superclass structure → easier to find correct fine class within superclass
+#     - higher alpha → less one-hot pressure on the target class
+#   If valid superclass accuracy is the bottleneck, this version will break it.
+#
+# Differences from v5 (version_1):
+#   lambda_coarse_from_fine: 0.5 → 1.0   (double the superclass signal)
+#   superclass_smooth_alpha:  0.15 → 0.25 (target=0.75, each sibling ≈ 0.0625 for 4 siblings)
+#   All other settings: identical to v5
+#
+# Main target metric: superclass accuracy (primary), fine Top-1 (secondary)
+# Code changes needed: NONE — all new params already supported by trainer.py
+# ============================================================
+
+seed: 42
+output_dir: logs
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 128
+  k_train: -1
+  randaugment_enable: true
+  randaugment_num_ops: 2
+  randaugment_magnitude: 9
+model:
+  name: cct
+  embed_dim: 256
+  depth: 14
+  n_heads: 4
+  mlp_ratio: 2.0
+  dropout: 0.2
+  attn_dropout: 0.0
+  stochastic_depth_rate: 0.1
+  n_conv_layers: 2
+  num_classes: 100
+  num_coarse_classes: 20
+train:
+  epochs: 400
+  optimizer: adamw
+  lr: 5e-4
+  weight_decay: 0.1
+  momentum: 0.9
+  nesterov: false
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  scheduler: cosine
+  warmup_epochs: 10
+  min_lr: 1e-5
+  label_smoothing: 0.0
+  mixup_alpha: 0.4
+  cutmix_alpha: 1.0
+  aug_mode: both
+  lambda_coarse: 0.0
+  superclass_smooth_alpha: 0.25
+  lambda_coarse_from_fine: 1.0
+  lambda_sibling_gap: 0.0
