@@ -35,7 +35,6 @@ class Trainer:
         label_smoothing = float(self.config.get("label_smoothing", 0.0))
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.mixup_alpha = float(self.config.get("mixup_alpha", 0.0))
-        self.lambda_coarse = float(self.config.get("lambda_coarse", 1.0))
         self.scheduler = self._build_scheduler()
         self.log_interval = log_interval
         
@@ -49,11 +48,6 @@ class Trainer:
         if fine_to_coarse is None:
             return None
         return torch.tensor([int(v) for v in fine_to_coarse], dtype=torch.long, device=self.device)
-
-    def _to_coarse_targets(self, fine_targets):
-        if self.fine_to_coarse is None:
-            raise ValueError("fine_to_coarse mapping is required for coarse loss.")
-        return self.fine_to_coarse[fine_targets]
 
     def _build_coarse_to_fine(self):
         """fine_to_coarse의 역방향 맵: coarse_idx → List[fine_idx]"""
@@ -100,16 +94,6 @@ class Trainer:
         log_probs = F.log_softmax(fine_logits, dim=1)
         return -(soft_targets * log_probs).sum(dim=1).mean()
 
-    @staticmethod
-    def _extract_logits(outputs):
-        if isinstance(outputs, dict):
-            fine_logits = outputs.get("fine_logits")
-            coarse_logits = outputs.get("coarse_logits")
-            if fine_logits is None:
-                raise ValueError("Model output dict must include 'fine_logits'.")
-            return fine_logits, coarse_logits
-        return outputs, None
-        
     def _build_scheduler(self):
         scheduler_name = str(self.config.get("scheduler", "cosine")).lower()
         if scheduler_name in {"none", "off", ""}:
@@ -197,28 +181,19 @@ class Trainer:
         self.model.train()
         running_loss = 0.0
         running_fine_loss = 0.0
-        running_coarse_loss = 0.0
         progress_bar = tqdm(loader, desc=f"train epoch {epoch}")
         for step, (x, y) in enumerate(progress_bar):            
                         
             x, y = x.to(self.device), y.to(self.device)
             x, y_a, y_b, lam = self._apply_mixup(x, y)
-            outputs = self.model(x)
-            fine_logits, coarse_logits = self._extract_logits(outputs)
+            fine_logits = self.model(x)
 
             if self.superclass_smooth_alpha > 0.0 and self.coarse_to_fine is not None:
                 fine_loss = (lam * self._superclass_aware_ce(fine_logits, y_a, self.superclass_smooth_alpha)
                              + (1.0 - lam) * self._superclass_aware_ce(fine_logits, y_b, self.superclass_smooth_alpha))
             else:
                 fine_loss = lam * self.criterion(fine_logits, y_a) + (1.0 - lam) * self.criterion(fine_logits, y_b)
-            coarse_loss = None
-            if coarse_logits is not None and self.lambda_coarse > 0.0:
-                coarse_y_a = self._to_coarse_targets(y_a)
-                coarse_y_b = self._to_coarse_targets(y_b)
-                coarse_loss = lam * self.criterion(coarse_logits, coarse_y_a) + (1.0 - lam) * self.criterion(coarse_logits, coarse_y_b)
-                loss = fine_loss + self.lambda_coarse * coarse_loss
-            else:
-                loss = fine_loss
+            loss = fine_loss
             
             self.optimizer.zero_grad()
             loss.backward()
@@ -226,8 +201,6 @@ class Trainer:
 
             running_loss += loss.item()
             running_fine_loss += fine_loss.item()
-            if coarse_loss is not None:
-                running_coarse_loss += coarse_loss.item()
             if step % self.log_interval == 0:
                 current_lr = self.optimizer.param_groups[0]["lr"]
                 postfix = {
@@ -235,8 +208,6 @@ class Trainer:
                     "Fine": f"{fine_loss.item():.5f}",
                     "LR": f"{current_lr:.6f}",
                 }
-                if coarse_loss is not None:
-                    postfix["Coarse"] = f"{coarse_loss.item():.5f}"
                 progress_bar.set_postfix(postfix)
         
         return running_loss / (step + 1)

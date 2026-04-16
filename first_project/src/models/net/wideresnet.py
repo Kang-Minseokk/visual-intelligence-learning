@@ -50,11 +50,6 @@ class WideResNet(ModelUtilMixin):
             nn.Flatten(),
             nn.Linear(widths[3], num_classes),
         )
-        self.coarse_head = nn.Sequential(
-            nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Flatten(),
-            nn.Linear(widths[3], int(num_coarse_classes)),
-        )
 
     @staticmethod
     def _make_group(in_channels: int, out_channels: int, num_blocks: int, stride: int, dropout: float):
@@ -66,7 +61,4 @@ class WideResNet(ModelUtilMixin):
     def forward(self, x):
         x = self.flatten(x)
         h = self.feature_extractor(x)
-        return {
-            "fine_logits": self.fine_head(h),
-            "coarse_logits": self.coarse_head(h),
-        }
+        return self.fine_head(h)
