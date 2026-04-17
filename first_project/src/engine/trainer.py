@@ -19,7 +19,9 @@ class Trainer:
         self.superclass_smooth_alpha = float(self.config.get("superclass_smooth_alpha", 0.0))
         self.lambda_coarse_from_fine = float(self.config.get("lambda_coarse_from_fine", 0.0))
         self.cutmix_alpha = float(self.config.get("cutmix_alpha", 0.0))
+        self.cutmix_prob = float(self.config.get("cutmix_prob", 0.5))
         self.aug_mode = str(self.config.get("aug_mode", "mixup")).lower()
+        self.coarse_head_type = str(self.config.get("coarse_head_type", "separate")).lower()
         self.lambda_sibling_gap = float(self.config.get("lambda_sibling_gap", 0.0))
         self.sibling_gap_margin = float(self.config.get("sibling_gap_margin", 0.5))
         # Pre-build per-superclass fine-index tensors for coarse_from_fine loss (efficiency)
@@ -335,7 +337,7 @@ class Trainer:
         if self.aug_mode == "cutmix":
             return self._apply_cutmix(x, y)
         elif self.aug_mode == "both":
-            if torch.rand(1).item() < 0.5:
+            if torch.rand(1).item() < self.cutmix_prob:
                 return self._apply_mixup(x, y)
             else:
                 return self._apply_cutmix(x, y)
@@ -365,11 +367,18 @@ class Trainer:
             loss = fine_loss
 
             coarse_loss = None
-            if coarse_logits is not None and self.lambda_coarse > 0.0:
-                coarse_y_a = self._to_coarse_targets(y_a)
-                coarse_y_b = self._to_coarse_targets(y_b)
-                coarse_loss = lam * self.criterion(coarse_logits, coarse_y_a) + (1.0 - lam) * self.criterion(coarse_logits, coarse_y_b)
-                loss = loss + self.lambda_coarse * coarse_loss
+            if self.lambda_coarse > 0.0:
+                if self.coarse_head_type == "aggregate":
+                    cf_a = self._coarse_from_fine_loss(fine_logits, y_a)
+                    cf_b = self._coarse_from_fine_loss(fine_logits, y_b)
+                    if cf_a is not None and cf_b is not None:
+                        coarse_loss = lam * cf_a + (1.0 - lam) * cf_b
+                        loss = loss + self.lambda_coarse * coarse_loss
+                elif coarse_logits is not None:
+                    coarse_y_a = self._to_coarse_targets(y_a)
+                    coarse_y_b = self._to_coarse_targets(y_b)
+                    coarse_loss = lam * self.criterion(coarse_logits, coarse_y_a) + (1.0 - lam) * self.criterion(coarse_logits, coarse_y_b)
+                    loss = loss + self.lambda_coarse * coarse_loss
 
             # Coarse-from-fine loss: logsumexp-grouped CE over fine logits.
             # Forces fine probability mass into the correct superclass without a separate head.

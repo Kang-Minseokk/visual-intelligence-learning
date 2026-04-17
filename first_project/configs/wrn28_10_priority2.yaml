@@ -1,0 +1,42 @@
+seed: 42
+output_dir: logs
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 128
+  k_train: -1
+  randaugment_enable: true
+  randaugment_num_ops: 2
+  randaugment_magnitude: 14   # P1: 9 → 14
+model:
+  name: "wideresnet"
+  hidden_features: 1024
+  dropout: 0.3                # P2: 0.0 → 0.3
+  num_classes: 100
+  num_coarse_classes: 20
+  depth: 2
+  wrn_depth: 28
+  widen_factor: 10
+train:
+  epochs: 300
+  optimizer: sgd
+  lr: 1e-1
+  weight_decay: 5e-4
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  momentum: 0.9
+  nesterov: true
+  scheduler: cosine
+  warmup_epochs: 5
+  min_lr: 1e-5
+  label_smoothing: 0.0
+  mixup_alpha: 1.0            # P1: 0.2 → 1.0
+  cutmix_alpha: 1.0           # P1: NEW
+  cutmix_prob: 0.5            # P1: NEW
+  aug_mode: both              # P1: NEW
+  lambda_coarse: 0.5
+  superclass_smooth_alpha: 0.1
