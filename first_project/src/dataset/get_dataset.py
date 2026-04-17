@@ -179,6 +179,7 @@ def get_dataset_loaders(
         print(f'[{dataset_name}] TRAIN - total: {len(train_set)}, per-class: {dict(enumerate(train_counts))}')
         print(f'[{dataset_name}] TEST  - total: {len(test_set)}, per-class: {dict(enumerate(test_counts))}')
 
+<<<<<<< Updated upstream
     train_loader = DataLoader(
         train_set,
         batch_size=batch_size,
@@ -188,6 +189,17 @@ def get_dataset_loaders(
         generator=torch.Generator().manual_seed(seed),
         worker_init_fn=worker_init_fn,
     )
+=======
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True,
+                              num_workers=num_workers, pin_memory=True,
+                              generator=torch.Generator().manual_seed(seed),
+                              worker_init_fn=worker_init_fn)
+    
+    valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=False,
+                              num_workers=num_workers, pin_memory=True, 
+                              generator=torch.Generator().manual_seed(seed), 
+                              worker_init_fn=worker_init_fn)
+>>>>>>> Stashed changes
 
     valid_loader = None
     if valid_set is not None:

@@ -5,6 +5,8 @@ import torch
 from src.dataset.get_dataset import get_dataset_loaders
 from src.engine.trainer import Trainer
 from src.models.net.base import BaseNet
+from src.models.net.cct import CCT
+from src.models.net.dhvt import DHVT
 from src.models.net.densenet import DenseNet
 from src.models.net.densenet_bc_100_12 import DenseNetBC100x12
 from src.models.net.densenet_bc_100_12_last import DenseNetBC100x12Last
@@ -120,6 +122,47 @@ def build_model(cfg, device, model_name: str, in_features=None):
             depth=int(cfg['model'].get('pyramid_depth', 110)),
             alpha=int(cfg['model'].get('pyramid_alpha', 48)),
             dropout=float(cfg['model'].get('dropout', 0.0)),
+        )
+    elif model_name == "cct":
+        if len(input_shape) != 3:
+            raise ValueError(f"CCT expects 3D image input (C,H,W), got: {input_shape}")
+        model = CCT(
+            in_channels=int(input_shape[0]),
+            embed_dim=int(cfg['model'].get('embed_dim', 256)),
+            depth=int(cfg['model'].get('depth', 14)),
+            n_heads=int(cfg['model'].get('n_heads', 4)),
+            mlp_ratio=float(cfg['model'].get('mlp_ratio', 2.0)),
+            dropout=float(cfg['model'].get('dropout', 0.1)),
+            attn_dropout=float(cfg['model'].get('attn_dropout', 0.0)),
+            stochastic_depth_rate=float(cfg['model'].get('stochastic_depth_rate', 0.1)),
+            n_conv_layers=int(cfg['model'].get('n_conv_layers', 2)),
+        )
+    elif model_name == "dhvt":
+        if len(input_shape) != 3:
+            raise ValueError(f"DHVT expects 3D image input (C,H,W), got: {input_shape}")
+
+        dims = tuple(int(v) for v in cfg['model'].get('dhvt_dims', [192, 320, 512]))
+        depths = tuple(int(v) for v in cfg['model'].get('dhvt_depths', [3, 6, 4]))
+        heads = tuple(int(v) for v in cfg['model'].get('dhvt_heads', [3, 5, 8]))
+        model = DHVT(
+            in_channels=int(input_shape[0]),
+            num_classes=int(cfg['model']['num_classes']),
+            num_coarse_classes=int(cfg['model'].get('num_coarse_classes', 20)),
+            dims=dims,
+            depths=depths,
+            heads=heads,
+            mlp_ratio=float(cfg['model'].get('dhvt_mlp_ratio', 3.0)),
+            dropout=float(cfg['model'].get('dropout', 0.1)),
+            attn_dropout=float(cfg['model'].get('attn_dropout', 0.0)),
+            drop_path_rate=float(cfg['model'].get('drop_path_rate', 0.2)),
+            layer_scale_init=float(cfg['model'].get('layer_scale_init', 1e-4)),
+        )
+    elif model_name == "vit":
+        model = ViT(
+            image_size=32,
+            patch_size=16, 
+            num_classes=int(cfg['model']['num_classes']),
+            num_coarse_classes=int(cfg['model'].get('num_coarse_classes', 20)),
         )
     else:
         raise ValueError(f'Unknown model name: {model_name}')

@@ -1,0 +1,68 @@
+seed: 42
+output_dir: logs/goal90-s3-hybrid-top1-coarse
+
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 64
+  k_train: -1
+  randaugment_enable: true
+  randaugment_num_ops: 3
+  randaugment_magnitude: 11
+
+model:
+  name: dhvt
+  num_classes: 100
+  num_coarse_classes: 20
+  dhvt_dims: [224, 384, 576]
+  dhvt_depths: [4, 7, 5]
+  dhvt_heads: [4, 6, 9]
+  dhvt_mlp_ratio: 3.0
+  dropout: 0.12
+  attn_dropout: 0.01
+  drop_path_rate: 0.22
+  layer_scale_init: 1e-5
+
+train:
+  epochs: 380
+  optimizer: adamw
+  lr: 6.5e-4
+  weight_decay: 0.06
+  grad_clip_norm: 1.0
+  mixed_precision: true
+  accumulation_steps: 2
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  scheduler: cosine
+  warmup_epochs: 25
+  min_lr: 6e-6
+
+  early_stop_metric: top1_coarse
+  early_stop_top1_weight: 0.65
+  early_stop_coarse_weight: 0.35
+  early_stop_patience: 40
+  early_stop_min_delta: 3e-4
+
+  label_smoothing: 0.055
+  augmentation_mode: mixup_cutmix
+  augmentation_prob: 1.0
+  mixup_scope: global
+  mixup_alpha: 0.16
+  cutmix_alpha: 0.8
+  cutmix_prob: 0.5
+
+  lambda_coarse: 0.11
+  superclass_smooth_alpha: 0.08
+
+  ema_enable: true
+  ema_decay: 0.9998
+  ema_update_after_step: 100
+  ema_use_for_eval: true
+
+eval:
+  compute_prf: true
+  include_per_class_prf: false

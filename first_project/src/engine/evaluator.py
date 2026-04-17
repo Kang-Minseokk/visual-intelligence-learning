@@ -4,6 +4,10 @@ import torch
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
+<<<<<<< Updated upstream
+=======
+from src.utils.metrics import multiclass_prf
+>>>>>>> Stashed changes
 
 class Evaluator:
     def __init__(self, model, device):
@@ -12,11 +16,28 @@ class Evaluator:
         self.criterion = CrossEntropyLoss()
 
     @torch.no_grad()
+<<<<<<< Updated upstream
     def evaluate(self, loader, classes=None, label_info=None, topk: int = 5, log_sample_topk: bool = False, split_name: str = 'eval'):
+=======
+    def evaluate(
+        self,
+        loader,
+        classes=None,
+        label_info=None,
+        topk: int = 5,
+        log_sample_topk: bool = False,
+        split_name: str = "eval",
+        compute_prf: bool = False,
+        include_per_class_prf: bool = False,
+    ):
+>>>>>>> Stashed changes
         self.model.eval()
         total_loss, total_top1, total_topk, total_superclass_match, n = 0.0, 0.0, 0.0, 0.0, 0
         has_superclass_metric = False
         logged_sample = False
+        all_top1_preds = []
+        all_targets = []
+        num_classes = None
 
         fine_to_coarse = (label_info or {}).get('fine_to_coarse')
         fine_classes = (label_info or {}).get('fine_classes')
@@ -32,7 +53,17 @@ class Evaluator:
             topk_labels = probs.topk(k=k, dim=1).indices
 
             top1_preds = logits.argmax(dim=1)
+            if num_classes is None:
+                num_classes = int(logits.shape[1])
             top1_batch = (top1_preds == y).float().mean().item()
+<<<<<<< Updated upstream
+=======
+
+            if compute_prf:
+                all_top1_preds.append(top1_preds.detach().cpu())
+                all_targets.append(y.detach().cpu())
+
+>>>>>>> Stashed changes
             in_topk = topk_labels.eq(y.unsqueeze(1)).any(dim=1).float().mean().item()
 
             superclass_match_batch = None
@@ -78,5 +109,23 @@ class Evaluator:
             'top5': total_topk / n,
         }
         if has_superclass_metric:
+<<<<<<< Updated upstream
             metrics['superclass_match@5'] = total_superclass_match / n
+=======
+            metrics["superclass_match@5"] = total_superclass_match / n
+        if has_coarse_top1:
+            metrics["coarse_top1"] = total_coarse_top1 / n
+
+        if compute_prf and all_top1_preds and all_targets and num_classes is not None:
+            preds_cat = torch.cat(all_top1_preds, dim=0)
+            targets_cat = torch.cat(all_targets, dim=0)
+            prf_metrics = multiclass_prf(
+                preds=preds_cat,
+                targets=targets_cat,
+                num_classes=num_classes,
+                include_per_class=include_per_class_prf,
+            )
+            metrics.update(prf_metrics)
+
+>>>>>>> Stashed changes
         return metrics
