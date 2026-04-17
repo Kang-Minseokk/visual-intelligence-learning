@@ -8,6 +8,7 @@ This Repo is for visual-intelligence-learning projects
 
 ## How to Run? (Method 1. train from the scratch)
   1. First of all, make python environment <br>
+      `cd first_project`
       `pip install -r requirements.txt`
       
   2. Next, make sure your current location is among first_project or second_project <br>
@@ -30,7 +31,7 @@ This Repo is for visual-intelligence-learning projects
     E-mail : pilot920@hanyang.ac.kr <br>
 
   * (Team Leader) Soyoon Kim <br>
-    E-mail : (comming soon) <br>
+    E-mail : soyoon030816@hanyang.ac.kr <br>
 
   * (Team Member) Xiang Li <br>
     E-mail : (comming soon) <br>
