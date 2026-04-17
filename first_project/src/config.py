@@ -9,7 +9,7 @@ def load_config():
     parser.add_argument('--seed', type=int, required=False, default=42)
     args = parser.parse_args()
 
-    cfg = yaml.safe_load(Path(args.config).read_text())
+    cfg = yaml.safe_load(Path(args.config).read_text(encoding='utf-8'))
     cfg['output_dir'] = args.output
     cfg['seed'] = args.seed
     

@@ -78,27 +78,39 @@ def main():
     writer = build_writer(cfg)
     _log_model_graph(writer, model, cfg, device, input_dim)
 
+    save_best = bool(cfg['train'].get('save_best', True))
+    test_use_best = bool(cfg['train'].get('test_use_best', True))
+    ckpt_dir = out_dir / "checkpoints"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    best_ckpt_path = ckpt_dir / "best_valid_top1.pt"
+    best_valid_top1 = -1.0
+    best_epoch = 0
+
     for epoch in range(1, cfg['train']['epochs'] + 1):            
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.synchronize()
 
         start = time.time()
 
         trainer.train_one_epoch(train_loader, epoch)
         trainer.step_scheduler()
         
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         end = time.time()
 
         avg_step_time = (end - start) / len(train_loader)
-        peak_mem_gb = torch.cuda.max_memory_allocated() / 1024**3
+        peak_mem_gb = (torch.cuda.max_memory_allocated() / 1024**3) if torch.cuda.is_available() else 0.0
         batch_size = cfg['data']['batch_size']
         throughput = batch_size / avg_step_time
 
         print(f"[Epoch {epoch:3d}] Time: {end - start:.2f}s | Avg Step Time: {avg_step_time:.4f}s | Peak Mem: {peak_mem_gb:.2f} GB | Throughput: {throughput:.2f} samples/s")
         
-        train_metrics = evaluator.evaluate(
+        eval_evaluator = Evaluator(model=trainer.get_eval_model(), device=device)
+
+        train_metrics = train_evaluator.evaluate(
             train_loader,
             classes=classes,
             label_info=label_info,
@@ -106,7 +118,7 @@ def main():
             log_sample_topk=True,
             split_name="train",
         )
-        valid_metrics = evaluator.evaluate(
+        valid_metrics = eval_evaluator.evaluate(
             valid_loader,
             classes=classes,
             label_info=label_info,
@@ -157,8 +169,16 @@ def main():
     # === TB: 종료 ===
     writer.flush()
     writer.close()
+
+    if test_use_best and best_ckpt_path.exists():
+        checkpoint = torch.load(best_ckpt_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        if trainer.ema_model is not None and "ema_state_dict" in checkpoint:
+            trainer.ema_model.load_state_dict(checkpoint["ema_state_dict"])
+        print(f"[Checkpoint] loaded best model from epoch {checkpoint['epoch']} for final test")
     
-    test_metrics = evaluator.evaluate(
+    final_evaluator = Evaluator(model=trainer.get_eval_model(), device=device)
+    test_metrics = final_evaluator.evaluate(
         test_loader,
         classes=classes,
         label_info=label_info,

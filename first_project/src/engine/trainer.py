@@ -1,6 +1,8 @@
 from __future__ import annotations
+import copy
 from tqdm import tqdm
 from pathlib import Path
+import torch
 from torch import nn
 import torch
 import torch.nn.functional as F
@@ -223,6 +225,7 @@ class Trainer:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+            self._update_ema()
 
             running_loss += loss.item()
             running_fine_loss += fine_loss.item()

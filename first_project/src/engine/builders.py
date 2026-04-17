@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 
 from src.models.net.base import BaseNet
+from src.models.net.densenet_bc_100_12 import DenseNetBC100x12
 from src.models.net.densenet import DenseNet
 from src.models.net.pyramidnet import PyramidNet
 from src.models.net.wideresnet import WideResNet
