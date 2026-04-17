@@ -58,7 +58,8 @@ def _log_model_graph(writer, model, cfg, device, input_dim):
 
 def main():
     cfg = load_config()
-    set_seed(42)
+    seed = cfg['seed']
+    set_seed(seed)
     
     out_dir = Path(cfg['output_dir'])
 
