@@ -27,6 +27,19 @@ class Trainer:
         # Pre-build per-superclass fine-index tensors for coarse_from_fine loss (efficiency)
         self._coarse_fine_indices = self._build_coarse_fine_indices()
 
+        self.global_step = 0
+        self.ema_enable = bool(self.config.get("ema_enable", False))
+        self.ema_decay = float(self.config.get("ema_decay", 0.9995))
+        self.ema_eval_start_epoch = int(self.config.get("ema_eval_start_epoch", 10))
+        if self.ema_enable:
+            import copy
+            self.ema_model = copy.deepcopy(model)
+            for p in self.ema_model.parameters():
+                p.requires_grad_(False)
+            self.ema_model.eval()
+        else:
+            self.ema_model = None
+
         optimizer_name = str(self.config.get("optimizer", "sgd")).lower()
         if optimizer_name == "sgd":
             self.optimizer = SGD(
@@ -299,6 +312,26 @@ class Trainer:
         if self.scheduler is not None:
             self.scheduler.step()
 
+    def _update_ema(self):
+        """EMA update with warmup: effective_decay = min(ema_decay, (1+step)/(10+step))."""
+        decay = min(self.ema_decay, (1 + self.global_step) / (10 + self.global_step))
+        with torch.no_grad():
+            for ema_p, p in zip(self.ema_model.parameters(), self.model.parameters()):
+                ema_p.mul_(decay).add_(p, alpha=1.0 - decay)
+            for ema_b, b in zip(self.ema_model.buffers(), self.model.buffers()):
+                ema_b.copy_(b)
+
+    def save_checkpoint(self, path, epoch, best_valid_top1=None, best_valid_ema_top1=None, cfg=None):
+        torch.save({
+            "epoch": epoch,
+            "model_state": self.model.state_dict(),
+            "ema_state": self.ema_model.state_dict() if self.ema_enable else None,
+            "optimizer_state": self.optimizer.state_dict(),
+            "best_valid_top1": best_valid_top1,
+            "best_valid_ema_top1": best_valid_ema_top1,
+            "config": cfg,
+        }, path)
+
     def _apply_mixup(self, x, y):
         if self.mixup_alpha <= 0.0:
             return x, y, y, 1.0
@@ -403,6 +436,9 @@ class Trainer:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+            self.global_step += 1
+            if self.ema_enable:
+                self._update_ema()
 
             running_loss += loss.item()
             running_fine_loss += fine_loss.item()

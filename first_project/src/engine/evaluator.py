@@ -1,7 +1,9 @@
 from __future__ import annotations
 import torch
+import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
+
 
 class Evaluator:
     def __init__(self, model, device):
@@ -20,9 +22,19 @@ class Evaluator:
         return outputs, None
 
     @torch.no_grad()
-    def evaluate(self, loader, classes=None, label_info=None, topk: int = 5, log_sample_topk: bool = False, split_name: str = "eval"):
+    def evaluate(
+        self,
+        loader,
+        classes=None,
+        label_info=None,
+        topk: int = 5,
+        log_sample_topk: bool = False,
+        split_name: str = "eval",
+        coarse_head_type: str = "separate",
+    ):
         self.model.eval()
-        total_loss, total_top1, total_topk, total_superclass_match, total_coarse_top1, n = 0.0, 0.0, 0.0, 0.0, 0.0, 0
+        total_loss = total_top1 = total_topk = total_superclass_match = total_coarse_top1 = 0.0
+        n = 0
         has_superclass_metric = False
         has_coarse_top1 = False
         logged_sample = False
@@ -32,9 +44,11 @@ class Evaluator:
         label_level = (label_info or {}).get("label_level")
         fine_to_coarse_tensor = None
         if fine_to_coarse is not None:
-            fine_to_coarse_tensor = torch.tensor([int(v) for v in fine_to_coarse], device=self.device, dtype=torch.long)
+            fine_to_coarse_tensor = torch.tensor(
+                [int(v) for v in fine_to_coarse], device=self.device, dtype=torch.long
+            )
 
-        for x, y in tqdm(loader, desc='eval'):
+        for x, y in tqdm(loader, desc="eval"):
             x, y = x.to(self.device), y.to(self.device)
             outputs = self.model(x)
             logits, coarse_logits = self._extract_logits(outputs)
@@ -46,9 +60,9 @@ class Evaluator:
 
             top1_preds = logits.argmax(dim=1)
             top1_batch = (top1_preds == y).float().mean().item()
-
             in_topk = topk_labels.eq(y.unsqueeze(1)).any(dim=1).float().mean().item()
 
+            # superclass_match@5
             superclass_match_batch = None
             if fine_to_coarse is not None and fine_classes is not None and logits.shape[1] == len(fine_classes):
                 has_superclass_metric = True
@@ -58,30 +72,39 @@ class Evaluator:
                     dtype=torch.long,
                 )
                 if label_level == "fine":
-                    mapped_true = torch.tensor([int(fine_to_coarse[idx]) for idx in y.tolist()], device=y.device, dtype=torch.long)
+                    mapped_true = torch.tensor(
+                        [int(fine_to_coarse[idx]) for idx in y.tolist()],
+                        device=y.device, dtype=torch.long,
+                    )
                 else:
                     mapped_true = y
-
                 superclass_match_batch = mapped_pred.eq(mapped_true.unsqueeze(1)).float().mean().item()
 
+            # coarse_top1 — branched on coarse_head_type
             coarse_top1_batch = None
-            if coarse_logits is not None and fine_to_coarse_tensor is not None:
+            if fine_to_coarse_tensor is not None:
                 coarse_targets = fine_to_coarse_tensor[y] if label_level == "fine" else y
-                coarse_preds = coarse_logits.argmax(dim=1)
-                coarse_top1_batch = (coarse_preds == coarse_targets).float().mean().item()
-                has_coarse_top1 = True
+                if coarse_head_type == "aggregate":
+                    # derive coarse prediction by aggregating fine softmax over each superclass
+                    num_coarse = int(fine_to_coarse_tensor.max().item()) + 1
+                    fine_probs = torch.softmax(logits, dim=1)                       # [B, 100]
+                    onehot = F.one_hot(fine_to_coarse_tensor, num_classes=num_coarse).float()  # [100, 20]
+                    coarse_probs = fine_probs @ onehot                              # [B, 20]
+                    coarse_preds = coarse_probs.argmax(dim=1)
+                    coarse_top1_batch = (coarse_preds == coarse_targets).float().mean().item()
+                    has_coarse_top1 = True
+                elif coarse_logits is not None:
+                    coarse_preds = coarse_logits.argmax(dim=1)
+                    coarse_top1_batch = (coarse_preds == coarse_targets).float().mean().item()
+                    has_coarse_top1 = True
 
-            if log_sample_topk and (not logged_sample):
-                sample_probs, sample_labels = probs[0].topk(k=k, dim=0)
-                names_source = fine_classes if (fine_classes is not None and logits.shape[1] == len(fine_classes)) else classes
-                if names_source is None:
-                    names = [str(idx) for idx in sample_labels.tolist()]
-                else:
-                    names = [names_source[idx] for idx in sample_labels.tolist()]
-                pairs = [f"{name}: {prob:.4f}" for name, prob in zip(names, sample_probs.tolist())]
-                msg = f"[{split_name}] top-{k} probs -> " + ", ".join(pairs)
+            if log_sample_topk and not logged_sample:
+                names_src = fine_classes if (fine_classes is not None and logits.shape[1] == len(fine_classes)) else classes
+                names = [names_src[i] for i in topk_labels[0].tolist()] if names_src else [str(i) for i in topk_labels[0].tolist()]
+                pairs = [f"{n}: {p:.4f}" for n, p in zip(names, probs[0].topk(k).values.tolist())]
+                msg = f"[{split_name}] top-{k} -> " + ", ".join(pairs)
                 if superclass_match_batch is not None:
-                    msg += f" | superclass_match@{k}: {superclass_match_batch:.3f}"
+                    msg += f" | sc@{k}: {superclass_match_batch:.3f}"
                 print(msg)
                 logged_sample = True
 
