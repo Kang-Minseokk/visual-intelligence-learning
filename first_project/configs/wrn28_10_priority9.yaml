@@ -1,5 +1,5 @@
 seed: 42
-output_dir: logs/wrn28_10_priority8
+output_dir: logs/wrn28_10_priority9
 data:
   root: ./data
   name: CIFAR100
@@ -33,7 +33,7 @@ train:
   scheduler: cosine
   warmup_epochs: 5
   min_lr: 1e-5
-  label_smoothing: 0.05          # P8 new: 0.0 → 0.05 (top-1 보존하면서 sc@5 개선)
+  label_smoothing: 0.05          # P9: 0.1의 절반 (top-1 보존 + sc@5 개선 균형)
   mixup_alpha: 1.0              # P1
   cutmix_alpha: 1.0             # P1
   cutmix_prob: 0.5              # P1
