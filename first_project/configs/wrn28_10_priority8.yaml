@@ -1,0 +1,49 @@
+seed: 42
+output_dir: logs/wrn28_10_priority8
+data:
+  root: ./data
+  name: CIFAR100
+  label_level: fine
+  download: true
+  num_workers: 4
+  batch_size: 128
+  k_train: -1
+  randaugment_enable: true
+  randaugment_num_ops: 2
+  randaugment_magnitude: 14     # P1: 9 → 14
+model:
+  name: "wideresnet"
+  hidden_features: 1024
+  dropout: 0.0                  # P1 level (no dropout)
+  num_classes: 100
+  num_coarse_classes: 20
+  depth: 2
+  wrn_depth: 28
+  widen_factor: 10
+train:
+  epochs: 400
+  optimizer: sgd
+  lr: 1e-1
+  weight_decay: 5e-4
+  device: cuda
+  log_interval: 235
+  ckpt_interval: 1
+  momentum: 0.9
+  nesterov: true
+  scheduler: cosine
+  warmup_epochs: 5
+  min_lr: 1e-5
+  label_smoothing: 0.1           # P8 new: 출력 공간 regularization (입력 aug와 상호보완)
+  mixup_alpha: 1.0              # P1
+  cutmix_alpha: 1.0             # P1
+  cutmix_prob: 0.5              # P1
+  aug_mode: both                # P1
+  eval_train_every_epoch: false
+  # --- EMA (P4) ---
+  ema_enable: true
+  ema_decay: 0.9995
+  ema_eval_start_epoch: 10
+  # --- Aggregate coarse signal (P5 new) ---
+  coarse_head_type: aggregate   # P3 교훈 반영: logsumexp aggregate
+  lambda_coarse: 0.3            # P3의 1.0 → 0.3 (약한 signal)
+  superclass_smooth_alpha: 0.1  # P3의 0.2 → 0.1 (원복)
