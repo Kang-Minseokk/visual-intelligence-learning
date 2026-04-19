@@ -52,6 +52,12 @@ def _log_model_graph(writer, model, cfg, device, input_dim):
         print(f"[TB] add_graph skipped: {e}")
 
 
+def _load_checkpoint_for_eval(model, ckpt_path: Path, device) -> dict:
+    ckpt = torch.load(ckpt_path, map_location=device)
+    model.load_state_dict(ckpt["model_state"])
+    return ckpt
+
+
 def main():
     cfg = load_config()
     set_seed(cfg.get("seed", 42))
@@ -65,8 +71,7 @@ def main():
     coarse_head_type = str(train_cfg.get("coarse_head_type", "separate"))
     eval_train = bool(train_cfg.get("eval_train_every_epoch", False))
 
-    # test_loader is intentionally unused here — use scripts/run_official_eval.py
-    train_loader, valid_loader, _, input_dim, classes, label_info = build_dataset_loaders(cfg)
+    train_loader, valid_loader, test_loader, input_dim, classes, label_info = build_dataset_loaders(cfg)
     cfg["model"]["input_dim"] = input_dim
     cfg["model"]["num_classes"] = len(classes)
     cfg["model"]["num_coarse_classes"] = int(
@@ -176,6 +181,40 @@ def main():
     print(f"best valid_top1:     {best_valid_top1:.4f}  →  {out_dir}/best.pt")
     if ema_evaluator:
         print(f"best valid_ema_top1: {best_valid_ema_top1:.4f}  →  {out_dir}/best_ema.pt")
+
+    print(f"\n=== Final Test (best checkpoints) ===")
+    best_ckpt = out_dir / "best.pt"
+    if best_ckpt.exists():
+        _load_checkpoint_for_eval(model, best_ckpt, device)
+        best_test_metrics = evaluator.evaluate(
+            test_loader,
+            split_name="test_best",
+            log_sample_topk=True,
+            **eval_kw,
+        )
+        print(_metrics_str("test_best", best_test_metrics))
+    else:
+        print(f"skip test_best: checkpoint not found -> {best_ckpt}")
+
+    if ema_evaluator:
+        best_ema_ckpt = out_dir / "best_ema.pt"
+        if best_ema_ckpt.exists():
+            ckpt = torch.load(best_ema_ckpt, map_location=device)
+            ema_state = ckpt.get("ema_state")
+            if ema_state is not None:
+                trainer.ema_model.load_state_dict(ema_state)
+                best_ema_test_metrics = ema_evaluator.evaluate(
+                    test_loader,
+                    split_name="test_best_ema",
+                    log_sample_topk=True,
+                    **eval_kw,
+                )
+                print(_metrics_str("test_best_ema", best_ema_test_metrics))
+            else:
+                print(f"skip test_best_ema: ema_state missing -> {best_ema_ckpt}")
+        else:
+            print(f"skip test_best_ema: checkpoint not found -> {best_ema_ckpt}")
+
     print(f"\nRun official eval:")
     print(f"  python scripts/run_official_eval.py --ckpt {out_dir}/best.pt --config <cfg>")
     if ema_evaluator:
