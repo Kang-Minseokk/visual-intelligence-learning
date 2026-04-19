@@ -15,7 +15,7 @@ This Repo is for visual-intelligence-learning projects
   3. Please checkout branch to "first-final-challenge"
   
   4. Finally, we can train and test CIFAR100 using command under.<br>
-      `python3 train.py --config configs/final_config.yaml --output ./output/<output-directory-you-want>`
+      `python3 train.py --config configs/international_final.yaml --output ./output/<output-directory-you-want>`
 
      ⭐️ config and output argument is mandatory. You can visualize the result and training curve with under command. <br>
       `tensorboard --logdir ./output/<output-directory-you-want>`
