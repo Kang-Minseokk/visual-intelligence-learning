@@ -21,7 +21,7 @@ model:
   wrn_depth: 28
   widen_factor: 10
 train:
-  epochs: 500
+  epochs: 2
   optimizer: sgd
   lr: 1e-1
   weight_decay: 5e-4

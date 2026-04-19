@@ -21,7 +21,7 @@ model:
   wrn_depth: 28
   widen_factor: 10
 train:
-  epochs: 600                    # P10: 수확 체감 확인용
+  epochs: 700                    # P10: 수확 체감 확인용
   optimizer: sgd
   lr: 1e-1
   weight_decay: 5e-4
