@@ -29,6 +29,12 @@ This Repo is for visual-intelligence-learning projects
      ⭐️ Please check the test acc and loss in Final Test checking area!
          <img width="1543" height="307" alt="image" src="https://github.com/user-attachments/assets/95d6da08-35e8-45e3-9cd4-f516009c7e99" />
 
+     ⭐️ If you want check via official measurement code, please run the `run_official_eval.py` under the scripts directory.
+       `python run_official_eval.py \
+          --ckpt ../output/<output-directory-you-wrote>/best.pt \
+          --config ../output/<output-directory-you-wrote>/config.yaml \
+          --split test`
+
 
 ## Do you need help?
   Please contact our team members below. <br>
