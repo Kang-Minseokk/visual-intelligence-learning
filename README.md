@@ -12,7 +12,7 @@ This Repo is for visual-intelligence-learning projects
       
   2. Next, make sure your current location is among first_project or second_project <br>
 
-  3. Please checkout branch to "first-final-challenge"
+  3. Please checkout branch to "first-final-challenge" (or you can run in main branch also - modified at Apr. 22th 01:30 pm)
   
   4. Finally, we can train and test CIFAR100 using command under.<br>
       `python3 train.py --config configs/international_final.yaml --output ./output/<output-directory-you-want>`
