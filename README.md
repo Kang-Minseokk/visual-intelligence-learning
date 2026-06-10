@@ -1,50 +1,35 @@
-# visual-intelligence-learning
-This Repo is for visual-intelligence-learning projects
+# 재현 방법 — DINO ViT-S/8 on STL-10
 
-## Short Describe 
-  Hi there 👋, Our team is "International" team.
-  This repo initialize 'visual-intelligence-learning(DAI3004)'
-  Build the customized model to classify CIFAR100 both supervised and self-supervised method
+```bash
+git clone <repo-url>
+cd visual-intelligence-learning/second_project
+pip install -r requirements.txt
+```
 
-## How to Run? (Method 1. train from the scratch)
-  1. First of all, make python environment <br>
-      `pip install -r requirements.txt`
-      
-  2. Next, make sure your current location is among first_project or second_project <br>
+그 다음 학습 + 평가 (약 14시간 소요):
 
-  3. Please checkout branch to "first-final-challenge"
-  
-  4. Finally, we can train and test CIFAR100 using command under.<br>
-      `python3 train.py --config configs/international_final.yaml --output ./output/<output-directory-you-want>`
+```bash
+# 포그라운드 (터미널 닫으면 죽음)
+bash reproduce_best.sh
 
-     ⭐️ config and output argument is mandatory. You can visualize the result and training curve with under command. <br>
-      `tensorboard --logdir ./output/<output-directory-you-want>`
-    
-     ⭐️ we can change seed using command under. <br>
-      `python3 train.py --config configs/international_final.yaml --output ./output/<output-directory-you-want> --seed 40`
+# 또는 백그라운드 (터미널 닫아도 OK, 권장)
+nohup bash reproduce_best.sh > reproduce.log 2>&1 &
+disown
 
-     ⭐️ Selection of config file will be announced after you execute the training by our teammates. If you want to check correcteness of config file, please contact me. (pilot920@hanyang.ac.kr) <br>
-       ✅ current best performence config file : international_final.yaml
+# 진행 상황 확인 (백그라운드일 때)
+tail -f reproduce.log
+# 또는 epoch별 학습 곡선:
+tail -f output/dino_vits8_sk_v2_fresh_stl_stats/log.csv
+```
 
-     ⭐️ Please check the test acc and loss in Final Test checking area!
-         <img width="1543" height="307" alt="image" src="https://github.com/user-attachments/assets/95d6da08-35e8-45e3-9cd4-f516009c7e99" />
+약 14시간 후 `reproduce.log` 마지막에 표시:
 
-     ⭐️ If you want check via official measurement code, please run the `run_official_eval.py` under the scripts directory.
-       `python run_official_eval.py \
-          --ckpt ../output/<output-directory-you-wrote>/best.pt \
-          --config ../output/<output-directory-you-wrote>/config.yaml \
-          --split test`
+```
+Final Results
+stl10      Top-1: ~93.2%
+cifar10    Top-1: ~89.0%
+```
 
+저장 위치: `output/dino_vits8_sk_v2_fresh_stl_stats/eval_results.txt`
 
-## Do you need help?
-  Please contact our team members below. <br>
-  * (Team Leader) Minseok Kang <br>
-    E-mail : pilot920@hanyang.ac.kr <br>
-
-  * (Team Leader) Soyoon Kim <br>
-    E-mail : (comming soon) <br>
-
-  * (Team Member) Xiang Li <br>
-    E-mail : (comming soon) <br>
-       
-  
+요구사항: NVIDIA GPU (RTX 30xx/40xx, A100 등 Ampere+, VRAM 14GB+), 디스크 10GB
