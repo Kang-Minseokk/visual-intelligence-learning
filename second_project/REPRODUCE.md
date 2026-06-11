@@ -32,4 +32,4 @@ cifar10    Top-1: ~89.0%
 
 저장 위치: `output/dino_vits8_sk_v2_fresh_stl_stats/eval_results.txt`
 
-요구사항: NVIDIA GPU (RTX 30xx/40xx, A100 등 Ampere+, VRAM 14GB+), 디스크 10GB
+요구사항: NVIDIA GPU (RTX 30xx/40xx, A100 등 Ampere+, VRAM 14GB+), 디스크 10GB, 인터넷.
