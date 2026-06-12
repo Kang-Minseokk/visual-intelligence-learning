@@ -28,7 +28,7 @@ BACKBONE=vit_small_patch8_224 \
     --warmup-teacher-temp 0.07 \
     --warmup-teacher-temp-epochs 5 \
     --teacher-temp 0.04 \
-    --batch-size 128 \
+    --batch-size 64 \
     --num-workers 12 \
     --global-size 96 \
     --local-size 48 \
